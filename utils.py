@@ -101,8 +101,8 @@ class LibriSpeechDataset(data.Dataset):
     
     
     def __init__(self, limit=None, n_channels=1, n_frames=128, sr=16000, n_fft=2048, max_target_length=40,
-                 n_mels=40, hop_length=512, power=1.0, n_mfcc=39, duration=10, path="../librispeech/LibriSpeech/",
-                 version = "train-clean-360", method='mfccs'):
+                 n_mels=39, hop_length=512, power=1.0, n_mfcc=39, duration=10, path="../librispeech/LibriSpeech/",
+                 version = "train-clean-360", method='mel'):
         'Initialization'
         self.method = method
         self.tokenizer = BertTokenizer.from_pretrained('bert-base-uncased') # Bert's tokenizer
@@ -154,6 +154,12 @@ class LibriSpeechDataset(data.Dataset):
 
         return augmented_wave
     
+    def wave_cropper(self, wave):
+        """ To simulate the blank at the beginning of the audio."""
+        nb_crop =  np.random.choice([50, 100, 125, 200, 250, 300])
+        wave[:nb_crop] = 0
+        return wave
+    
 
     def choice_augmentation(self, wave):
         """Choose an augmentation technique from between adding noise or changing speed.
@@ -161,12 +167,14 @@ class LibriSpeechDataset(data.Dataset):
         yes_or_not = np.random.choice([False, True], p=[0.65, 0.35])
         if yes_or_not == True:
             # Choose randomly an augmentation
-            aug = np.random.choice(["b_noise", "speed"], p=[0.3, 0.7])
+            aug = np.random.choice(["b_noise", "crop", "speed"], p=[0.20, 0.15, 0.65])
             #  and perform the augmentation 
             if aug == "b_noise":
                 wave = self.background_noise(wave)
             elif  aug == "speed":
                 wave = self.change_speed(wave)
+            elif aug == "crop":
+                wave = self.wave_cropper(wave)
 
             return wave
         else:
@@ -205,13 +213,8 @@ class LibriSpeechDataset(data.Dataset):
     
     
     def wave2melspec(self, wave):
-        mel_spectogram =  librosa.feature.melspectrogram(y=wave,
-                                                  sr=self.sr,
-                                                  n_mels=self.n_mels,
-                                                  hop_length=self.hop_length,
-                                                  fmax=self.sr)
-        # Normalization of the mfccs
-        mel_spectogram = ((mel_spectogram.T - mel_spectogram.mean(axis=1)) / mel_spectogram.std(axis=1)).T 
+        mel_spectogram =  librosa.feature.melspectrogram(y=wave, sr=self.sr, n_mels=self.n_mels,
+                                                         hop_length=self.hop_length, fmax=self.sr)
         
         return mel_spectogram
     
@@ -254,8 +257,8 @@ class LibriSpeechDataset(data.Dataset):
             sentence = sentence[:self.max_length]     
         mat = torch.tensor(mat)
         # Random augmentation at sepectogram level for mel spectogram
-        if self.method == 'mel':
-            mat = self.spec_augmenter(mat)
+        #if self.method == 'mel':
+        mat = self.spec_augmenter(mat)
         
         return mat, torch.tensor(sentence)
     
@@ -264,7 +267,7 @@ class LibriSpeechDataset(data.Dataset):
     
     
 def train_step(phase, input_tensor, target_tensor, encoder, decoder, encoder_optimizer,
-          decoder_optimizer, criterion, device, batch_sz, targ_lang_tokenizer, teacher_forcing_ratio=0.5, bad_audio_mode=True):
+          decoder_optimizer, criterion, device, batch_sz, targ_lang_tokenizer, teacher_forcing_ratio=0.85, bad_audio_mode=True):
     
     # Initialize the encoder
     encoder_hidden = encoder.initialize_hidden_state()

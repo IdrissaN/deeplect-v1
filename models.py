@@ -173,10 +173,10 @@ class DecoderATTRNN(nn.Module):
         self.norm_layer_2 = nn.LayerNorm((1, hidden_size))
         self.norm_layer_3 = nn.LayerNorm((1, hidden_size))
         
-        self.gru_1 = nn.GRU(3072 + hidden_size, self.dec_units, batch_first=True, dropout=0.2)
-        self.gru_2 = nn.GRU(self.dec_units, self.dec_units, batch_first=True, dropout=0.2)
-        self.gru_3 = nn.GRU(self.dec_units, self.dec_units, batch_first=True, dropout=0.2)
-        self.gru_4 = nn.GRU(self.dec_units, self.dec_units, batch_first=True, dropout=0.2)
+        self.gru_1 = nn.GRU(3072 + hidden_size, self.dec_units, batch_first=True, dropout=0.1)
+        self.gru_2 = nn.GRU(self.dec_units, self.dec_units, batch_first=True, dropout=0.1)
+        self.gru_3 = nn.GRU(self.dec_units, self.dec_units, batch_first=True, dropout=0.1)
+        self.gru_4 = nn.GRU(self.dec_units, self.dec_units, batch_first=True, dropout=0.1)
         
         self.fc = nn.Linear(hidden_size, vocab_size)
         # used for attention

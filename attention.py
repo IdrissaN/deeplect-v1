@@ -27,7 +27,7 @@ class BahdanauAttentionAudio(nn.Module):
     
     def __init__(self, units, hidden_size, encoder_timestamps=198):
         super().__init__()
-        self.kernel_size = 3
+        self.kernel_size = 5
         self.encoder_timestamps = encoder_timestamps
         self.W1 = nn.Linear(hidden_size, units)
         self.W2 = nn.Linear(hidden_size, units)

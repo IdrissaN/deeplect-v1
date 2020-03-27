@@ -73,7 +73,7 @@ class BeamTreeNode(object):
 
 
         
-def greedy_decode(mfccs, max_length_targ, encoder, decoder, targ_lang, device, enc_units=64, bad_audio_mode=True):
+def greedy_decode(mfccs, max_length_targ, encoder, decoder, targ_lang_tokenizer, device, enc_units=64, bad_audio_mode=True):
 
     
     # Send the inputs matrix to device
@@ -86,7 +86,7 @@ def greedy_decode(mfccs, max_length_targ, encoder, decoder, targ_lang, device, e
         enc_hidden = torch.zeros(2, 1, enc_units, device=device)
         enc_out, enc_hidden = encoder(mfccs, enc_hidden)
         dec_hidden = enc_hidden
-        dec_input = torch.tensor([[targ_lang.word_index['<start>']]], device=device)
+        dec_input = torch.tensor([[targ_lang_tokenizer.cls_token_id]], device=device)
         attention_weights = torch.zeros(1, 198, 1).to(device)
         for t in range(max_length_targ):
             if bad_audio_mode:
@@ -100,9 +100,9 @@ def greedy_decode(mfccs, max_length_targ, encoder, decoder, targ_lang, device, e
                                                                      enc_out)
             # storing the attention weights to plot later on
             topv, topi = predictions.data.topk(1)
-            result += targ_lang.index_word[topi.item()] + ' '
+            result += targ_lang_tokenizer.convert_ids_to_tokens(topi.item()) + ' '
 
-            if targ_lang.index_word[topi.item()] == '<end>':
+            if targ_lang_tokenizer.convert_ids_to_tokens(topi.item()) == '[SEP]':
                 return result, sentence
 
             # the predicted ID is fed back into the model
@@ -111,7 +111,7 @@ def greedy_decode(mfccs, max_length_targ, encoder, decoder, targ_lang, device, e
         return result
     
         
-def beam_search_decode(mfccs, max_length_targ,  encoder, decoder,  targ_lang, device,
+def beam_search_decode(mfccs, max_length_targ,  encoder, decoder,  targ_lang_tokenizer, device,
                        nb_candidates, beam_width, alpha, enc_units=64, bad_audio_mode=True):
 
     # Send the inputs matrix to device
@@ -126,7 +126,7 @@ def beam_search_decode(mfccs, max_length_targ,  encoder, decoder,  targ_lang, de
         enc_out, enc_hidden = encoder(mfccs, hidden)
 
         dec_hidden = enc_hidden
-        dec_input = torch.tensor([[targ_lang.word_index['<start>']]], device=device)
+        dec_input = torch.tensor([[targ_lang_tokenizer.cls_token_id]], device=device)
         
         candidates = []
         # Créer la racine (le noeud de départ de l'arbre)
@@ -162,7 +162,7 @@ def beam_search_decode(mfccs, max_length_targ,  encoder, decoder,  targ_lang, de
                         n.add_child(node)
                         node.add_parent(n)
                         # Si on prédit la fin ou que la longueur maximale est atteinte
-                        if targ_lang.index_word[ind.item()] == '<end>':
+                        if targ_lang_tokenizer.convert_ids_to_tokens(ind.item()) == '[SEP]':
                             node.is_end = True 
                             endnodes.append(node)
        
@@ -184,19 +184,19 @@ def beam_search_decode(mfccs, max_length_targ,  encoder, decoder,  targ_lang, de
         # Find the path
         for elem in node.path:
             if elem != 0:
-                result += targ_lang.index_word[elem] + ' '
+                result += targ_lang_tokenizer.convert_ids_to_tokens(elem) + ' '
 
         return result        
         
         
 
-def evaluate(mfccs, references, max_length_targ, encoder, decoder, targ_lang, 
+def evaluate(mfccs, references, max_length_targ, encoder, decoder, targ_lang_tokenizer, 
               device, beam_search=False, beam_width=3, alpha=0.3, nb_candidates=10):
     
     if beam_search == False:
-        result= greedy_decode(mfccs, max_length_targ, encoder, decoder, targ_lang, device)
+        result= greedy_decode(mfccs, max_length_targ, encoder, decoder, targ_lang_tokenizer, device)
     else:
-        result = beam_search_decode(mfccs, max_length_targ, encoder, decoder, targ_lang, device=device,
+        result = beam_search_decode(mfccs, max_length_targ, encoder, decoder, targ_lang_tokenizer, device=device,
                                               beam_width=beam_width, nb_candidates=nb_candidates, alpha=alpha)
     result = result.split()    
     BLEUscore = bleu([references], result, weights = (0.5, 0.5))
