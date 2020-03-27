@@ -15,7 +15,10 @@ from attention import *
 from transformers import BertModel, BertConfig
 
 config = BertConfig.from_pretrained('bert-base-uncased', output_hidden_states=True)
-
+model_features = BertModel.from_pretrained('bert-base-uncased', config=config)
+model_features.eval()
+for param in model_features.parameters():
+    param.requires_grad = False
     
     
 class ConvBase(nn.Module):
@@ -46,9 +49,8 @@ class RnnBase(nn.Module):
         self.device = device
         self.hidden_size = hidden_size
         self.batch_size = batch_size 
-        self.dropout = nn.Dropout(0.2)
-        self.batchnorm1d = nn.BatchNorm1d(bn_in_feat)
-        self.gru = nn.GRU(gru_in_feat, self.hidden_size, batch_first=True, num_layers=1, bidirectional=True)
+        #self.batchnorm1d = nn.BatchNorm1d(bn_in_feat)
+        self.gru = nn.GRU(gru_in_feat, self.hidden_size, batch_first=True, num_layers=1, bidirectional=True, dropout=0.2)
     
     
     def forward(self, seq, hidden):
@@ -63,9 +65,9 @@ class RnnBase(nn.Module):
         # Sum the forward pass and the backward to form the output
         output = forward + backward
         output = F.relu(output)
-        output = self.batchnorm1d(output)
+        #output = self.batchnorm1d(output)
         # Pass through the dropout layer
-        output = self.dropout(output)
+        #output = self.dropout(output)
         # I don't know what i will do with but i collect the last state for the moment
         #self.last_state = hidden.view(2,  self.batch_size, self.hidden_size)[-1,:,:].unsqueeze(0).to(self.device)
         hidden = hidden.view(1, 2,  -1, self.hidden_size)
@@ -81,16 +83,24 @@ class RnnBase(nn.Module):
 class EncoderCONV2DRNN(nn.Module):
     def __init__(self, device, batch_size = 10, hidden_size=256):
         super().__init__() 
+        self.encoder_timestamp = 198
         self.batch_size = batch_size
         self.conv_base = ConvBase(hidden_size)
         self.hidden_size = hidden_size
         self.device = device
-        self.rnn_base_1 = RnnBase(device, hidden_size, batch_size, bn_in_feat=198, gru_in_feat=1088)
-        self.rnn_base_2 = RnnBase(device, hidden_size, batch_size, bn_in_feat=198, gru_in_feat=hidden_size)
-        self.rnn_base_3 = RnnBase(device, hidden_size, batch_size, bn_in_feat=198, gru_in_feat=hidden_size)
-        self.rnn_base_4 = RnnBase(device, hidden_size, batch_size, bn_in_feat=198, gru_in_feat=hidden_size)
-        self.rnn_base_5 = RnnBase(device, hidden_size, batch_size, bn_in_feat=198, gru_in_feat=hidden_size)
-        self.rnn_base_6 = RnnBase(device, hidden_size, batch_size, bn_in_feat=198, gru_in_feat=hidden_size)
+        self.norm_layer_1 = nn.LayerNorm((self.encoder_timestamp, hidden_size))
+        self.norm_layer_2 = nn.LayerNorm((self.encoder_timestamp, hidden_size))
+        self.norm_layer_3 = nn.LayerNorm((self.encoder_timestamp, hidden_size))
+        self.norm_layer_4 = nn.LayerNorm((self.encoder_timestamp, hidden_size))
+        self.norm_layer_5 = nn.LayerNorm((self.encoder_timestamp, hidden_size))
+        self.norm_layer_6 = nn.LayerNorm((self.encoder_timestamp, hidden_size))
+        
+        self.rnn_base_1 = RnnBase(device, hidden_size, batch_size, bn_in_feat=self.encoder_timestamp, gru_in_feat=1088)
+        self.rnn_base_2 = RnnBase(device, hidden_size, batch_size, bn_in_feat=self.encoder_timestamp, gru_in_feat=hidden_size)
+        self.rnn_base_3 = RnnBase(device, hidden_size, batch_size, bn_in_feat=self.encoder_timestamp, gru_in_feat=hidden_size)
+        self.rnn_base_4 = RnnBase(device, hidden_size, batch_size, bn_in_feat=self.encoder_timestamp, gru_in_feat=hidden_size)
+        self.rnn_base_5 = RnnBase(device, hidden_size, batch_size, bn_in_feat=self.encoder_timestamp, gru_in_feat=hidden_size)
+        self.rnn_base_6 = RnnBase(device, hidden_size, batch_size, bn_in_feat=self.encoder_timestamp, gru_in_feat=hidden_size)
 
 
     def forward(self, mfccs, hidden):
@@ -99,26 +109,32 @@ class EncoderCONV2DRNN(nn.Module):
         output = self.conv_base(mfccs)
         # Sequential bloc
         output, _ = self.rnn_base_1(output, hidden)
+        output = self.norm_layer_1(output)
         copy_output = output.clone()
         
         output, _ = self.rnn_base_2(output, hidden)
         output = output + copy_output
+        output = self.norm_layer_2(output)
         copy_output = output.clone()
         
         output, _ = self.rnn_base_3(output, hidden)
         output = output + copy_output
+        output = self.norm_layer_3(output)
         copy_output = output.clone()
         
         output, _ = self.rnn_base_4(output, hidden)
         output = output + copy_output
+        output = self.norm_layer_4(output)
         copy_output = output.clone()
         
         output, _ = self.rnn_base_5(output, hidden)
         output = output + copy_output
+        output = self.norm_layer_5(output)
         copy_output = output.clone()
 
         output, hidden = self.rnn_base_6(output, hidden)
         output = output + copy_output
+        output = self.norm_layer_6(output)
 
         return output, hidden
 
@@ -127,21 +143,17 @@ class EncoderCONV2DRNN(nn.Module):
     
 
 
-
 class bert_embedding_layer(nn.Module):
-    def __init__(self, model=BertModel.from_pretrained('bert-base-uncased', config=config)):
+    def __init__(self, model=model_features):
         super().__init__()
         # Load pre-trained model (weights)
         self.model = model 
         self.model.config.output_hidden_states=True
-        # Put the model in "evaluation" mode, meaning feed-forward operation.
-        self.model.eval()
+
         
     def forward(self, tokens_tensor):
-        with torch.no_grad():
-            #print('EDiééééé ', tokens_tensor.shape)
-            segments_tensor = torch.ones(tokens_tensor.shape[0], tokens_tensor.shape[1])
-            last_layers, _, encoded_layers = self.model(tokens_tensor, segments_tensor)
+        segments_tensor = torch.ones(tokens_tensor.shape[0], tokens_tensor.shape[1])
+        last_layers, _, encoded_layers = self.model(tokens_tensor, segments_tensor)
             
         return torch.cat(encoded_layers[-4:], dim=-1)
     
@@ -155,16 +167,16 @@ class DecoderATTRNN(nn.Module):
         super().__init__()
         self.batch_sz = batch_sz
         self.dec_units = dec_units
-        #self.embedding = nn.Embedding(vocab_size, embedding_dim)
         self.embedding = bert_embedding_layer()
-        self.batchnorm1d_1 = nn.BatchNorm1d(1)
-        self.batchnorm1d_2 = nn.BatchNorm1d(1)
-        self.batchnorm1d_3 = nn.BatchNorm1d(1)
         
-        self.gru_1 = nn.GRU(3072 + hidden_size, self.dec_units, batch_first=True)
-        self.gru_2 = nn.GRU(self.dec_units, self.dec_units, batch_first=True)
-        self.gru_3 = nn.GRU(self.dec_units, self.dec_units, batch_first=True)
-        self.gru_4 = nn.GRU(self.dec_units, self.dec_units, batch_first=True)
+        self.norm_layer_1 = nn.LayerNorm((1, hidden_size))
+        self.norm_layer_2 = nn.LayerNorm((1, hidden_size))
+        self.norm_layer_3 = nn.LayerNorm((1, hidden_size))
+        
+        self.gru_1 = nn.GRU(3072 + hidden_size, self.dec_units, batch_first=True, dropout=0.2)
+        self.gru_2 = nn.GRU(self.dec_units, self.dec_units, batch_first=True, dropout=0.2)
+        self.gru_3 = nn.GRU(self.dec_units, self.dec_units, batch_first=True, dropout=0.2)
+        self.gru_4 = nn.GRU(self.dec_units, self.dec_units, batch_first=True, dropout=0.2)
         
         self.fc = nn.Linear(hidden_size, vocab_size)
         # used for attention
@@ -186,17 +198,17 @@ class DecoderATTRNN(nn.Module):
         
         output, _ = self.gru_2(output)
         output = output + copy_output
-        output = self.batchnorm1d_1(output)
+        output = self.norm_layer_1(output)
         copy_output = output.clone()
 
         output, _ = self.gru_3(output)
         output = output + copy_output
-        output = self.batchnorm1d_2(output)
+        output = self.norm_layer_2(output)
         copy_output = output.clone()
         
         output, state = self.gru_4(output)
         output = output + copy_output
-        output = self.batchnorm1d_3(output)
+        output = self.norm_layer_3(output)
         
         # output shape == (batch_size * 1, hidden_size)
         output = output.reshape(-1, output.shape[2])
