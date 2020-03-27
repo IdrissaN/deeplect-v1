@@ -218,9 +218,8 @@ class LibriSpeechDataset(data.Dataset):
     
     def str2num(self, sentence, lang_tokenizer):
 
-        tokenized_text = lang_tokenizer.tokenize(sentence)
         # Map the token strings to their vocabulary indeces.
-        indexed_tokens = lang_tokenizer.convert_tokens_to_ids(tokenized_text)
+        indexed_tokens = lang_tokenizer.encode(sentence, add_special_tokens=True) 
 
         return indexed_tokens
     

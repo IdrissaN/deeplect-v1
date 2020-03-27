@@ -180,8 +180,8 @@ class DecoderATTRNN(nn.Module):
         
         self.fc = nn.Linear(hidden_size, vocab_size)
         # used for attention
-        self.attention = BahdanauAttentionAudio(units=dec_units, hidden_size=hidden_size)
-        
+        #self.attention = BahdanauAttentionAudio(units=dec_units, hidden_size=hidden_size)
+        self.attention =  SuperHeadAttention(units=dec_units, hidden_size=hidden_size)
  
     
     def forward(self, input, hidden, enc_output, prev_attn_weights):
