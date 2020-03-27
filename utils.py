@@ -154,11 +154,6 @@ class LibriSpeechDataset(data.Dataset):
 
         return augmented_wave
     
-    def wave_cropper(self, wave):
-        """ To simulate the blank at the beginning of the audio."""
-        nb_crop =  np.random.choice([50, 100, 125, 200, 250, 300])
-        wave[:nb_crop] = 0
-        return wave
     
 
     def choice_augmentation(self, wave):
@@ -167,14 +162,12 @@ class LibriSpeechDataset(data.Dataset):
         yes_or_not = np.random.choice([False, True], p=[0.65, 0.35])
         if yes_or_not == True:
             # Choose randomly an augmentation
-            aug = np.random.choice(["b_noise", "crop", "speed"], p=[0.20, 0.15, 0.65])
+            aug = np.random.choice(["b_noise", "speed"], p=[0.30, 0.70])
             #  and perform the augmentation 
             if aug == "b_noise":
                 wave = self.background_noise(wave)
-            elif  aug == "speed":
+            elif aug == "speed":
                 wave = self.change_speed(wave)
-            elif aug == "crop":
-                wave = self.wave_cropper(wave)
 
             return wave
         else:
@@ -267,7 +260,7 @@ class LibriSpeechDataset(data.Dataset):
     
     
 def train_step(phase, input_tensor, target_tensor, encoder, decoder, encoder_optimizer,
-          decoder_optimizer, criterion, device, batch_sz, targ_lang_tokenizer, teacher_forcing_ratio=0.85, bad_audio_mode=True):
+          decoder_optimizer, criterion, device, batch_sz, targ_lang_tokenizer, teacher_forcing_ratio=0.80):
     
     # Initialize the encoder
     encoder_hidden = encoder.initialize_hidden_state()
@@ -293,13 +286,10 @@ def train_step(phase, input_tensor, target_tensor, encoder, decoder, encoder_opt
     # Teacher forcing: Feed the target as the next input to help the model
     # in case it starts with the wrong word.
     for di in range(1, target_length):
-        if bad_audio_mode:
-            decoder_output, decoder_hidden, decoder_attention = decoder(
-                    decoder_input, decoder_hidden, encoder_outputs, decoder_attention)
+        
+        decoder_output, decoder_hidden, decoder_attention = decoder(decoder_input, decoder_hidden,
+                                                                    encoder_outputs, decoder_attention)
            
-        else:
-            decoder_output, decoder_hidden, decoder_attention = decoder(
-                    decoder_input, decoder_hidden, encoder_outputs)
             
         loss += criterion(decoder_output, target_tensor[:, di])
         if use_teacher_forcing:
@@ -323,7 +313,7 @@ def train_step(phase, input_tensor, target_tensor, encoder, decoder, encoder_opt
 def global_trainer(nbr_epochs, train_dataloader, valid_dataloader, encoder, decoder, 
                    encoder_optimizer, decoder_optimizer,criterion, device, batch_sz, 
                    tokenizer=BertTokenizer.from_pretrained('bert-base-uncased'),
-                   patience=10, bad_audio_mode=True):
+                   patience=10):
     
     nb_params = sum(p.numel() for p in encoder.parameters() if p.requires_grad) + \
                 sum(p.numel() for p in decoder.parameters() if p.requires_grad)
@@ -356,12 +346,12 @@ def global_trainer(nbr_epochs, train_dataloader, valid_dataloader, encoder, deco
                     if phase == 'train':
                         batch_loss = train_step(phase, inp, targ, encoder, decoder, encoder_optimizer,
                                         decoder_optimizer, criterion,
-                                        device, batch_sz, targ_lang_tokenizer=tokenizer, bad_audio_mode=bad_audio_mode)
+                                        device, batch_sz, targ_lang_tokenizer=tokenizer)
                     else:
                         with torch.no_grad():
                             batch_loss = train_step(phase, inp, targ, encoder, decoder, encoder_optimizer,
                                         decoder_optimizer, criterion,
-                                        device, batch_sz, targ_lang_tokenizer=tokenizer, bad_audio_mode=bad_audio_mode)
+                                        device, batch_sz, targ_lang_tokenizer=tokenizer)
                     total_loss += batch_loss
                 
                     if phase == 'train':
