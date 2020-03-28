@@ -26,15 +26,14 @@ import tensorflow as tf
 import torchaudio
 from queue import PriorityQueue
 from torch.utils import data
+import torch.nn as nn
+import torch.optim as optim
 from transformers import BertTokenizer
 from torch.nn.utils.rnn import pad_sequence
 from SpecAugment import spec_augment_pytorch
 from nltk.translate.bleu_score import sentence_bleu as bleu
-from torchaudio.datasets.utils import (
-    download_url,
-    extract_archive,
-    unicode_csv_reader,
-    walk_files)
+from torchaudio.datasets.utils import (download_url, extract_archive,
+                                       unicode_csv_reader, walk_files)
 
 
 warnings.filterwarnings('ignore')
@@ -45,7 +44,6 @@ warnings.filterwarnings('ignore')
 def unicode_to_ascii(s):
     return ''.join(c for c in unicodedata.normalize('NFD', s)
           if unicodedata.category(c) != 'Mn')
-
 
 
 def preprocess_sentence(w):
@@ -259,11 +257,14 @@ class LibriSpeechDataset(data.Dataset):
 
     
     
-def train_step(phase, input_tensor, target_tensor, encoder, decoder, encoder_optimizer,
+def train_step(iters, phase, batch, type_scheduler, input_tensor, target_tensor, encoder, decoder, encoder_optimizer,
           decoder_optimizer, criterion, device, batch_sz, targ_lang_tokenizer, teacher_forcing_ratio=0.80):
     
     # Initialize the encoder
     encoder_hidden = encoder.initialize_hidden_state()
+    if phase == 'train' and type_scheduler=='warm_restarts':
+        encoder_scheduler.step(epoch + batch / iters)
+        
     # Put all the previously computed gradients to zero
     encoder_optimizer.zero_grad()
     decoder_optimizer.zero_grad()
@@ -281,16 +282,13 @@ def train_step(phase, input_tensor, target_tensor, encoder, decoder, encoder_opt
         use_teacher_forcing = True  
     else:  
         use_teacher_forcing = False
-
+        
     #if use_teacher_forcing:
     # Teacher forcing: Feed the target as the next input to help the model
     # in case it starts with the wrong word.
     for di in range(1, target_length):
-        
         decoder_output, decoder_hidden, decoder_attention = decoder(decoder_input, decoder_hidden,
                                                                     encoder_outputs, decoder_attention)
-           
-            
         loss += criterion(decoder_output, target_tensor[:, di])
         if use_teacher_forcing:
             decoder_input = torch.unsqueeze(target_tensor[:, di], 1)  # Teacher forcing
@@ -303,17 +301,88 @@ def train_step(phase, input_tensor, target_tensor, encoder, decoder, encoder_opt
     batch_loss = (loss.item() / int(target_tensor.shape[1]))
     if phase == 'train':
         loss.backward()
+        # Gradient clipping to 1.0 to avoid exploding
+        nn.utils.clip_grad_norm_(encoder.parameters(), 1.0)
+        nn.utils.clip_grad_norm_(decoder.parameters(), 1.0)
+        # Optimizing the weights
         encoder_optimizer.step()
         decoder_optimizer.step()
 
     return batch_loss
 
 
+def get_dataloader_scheduler(dataset, params, epoch):
+    """ The idea here is to ramp-up the batch_size from lowest value to the highest"""
+    
+    if epoch < 5:
+        params['batch_size'] = 16
+        
+    elif epoch > 5 and epoch < 15:
+        params['batch_size'] = 20
+        
+    elif epoch >= 15 and epoch < 30:
+        params['batch_size'] = 20
+        
+    elif epoch >= 30 and epoch < 50:
+        params['batch_size'] = 20
+        
+    elif epoch >= 50 and epoch < 80:
+        params['batch_size'] = 20
+        
+    else:
+        params['batch_size'] = 20
+        
+    dataloader = data.DataLoader(dataset, **params)
+        
+    return dataloader, params['batch_size']
 
-def global_trainer(nbr_epochs, train_dataloader, valid_dataloader, encoder, decoder, 
-                   encoder_optimizer, decoder_optimizer,criterion, device, batch_sz, 
-                   tokenizer=BertTokenizer.from_pretrained('bert-base-uncased'),
-                   patience=10):
+
+def get_optimizers_schedulers(encoder, decoder, epoch):
+    
+    """ Implement a combination of optimizers and schedulers for different stage of the training."""
+    outputs = {}
+    if epoch < 80:
+        # We will use an adaptative learning rate in this stage
+        type_scheduler = 'no_schedulers'
+        encoder_optimizer = optim.Adam(encoder.parameters())
+        decoder_optimizer = optim.Adam(decoder.parameters())
+        # No schedulers
+        schedulers = None
+    else:
+        encoder_optimizer = optim.SGD(encoder.parameters(), momentum=0.9, nesterov=True)
+        decoder_optimizer = optim.SGD(decoder.parameters(), momentum=0.9, nesterov=True)
+        
+        if epoch < 100:
+            # Exponential decay between 80 and 100 epochs
+            type_scheduler = 'expo_decay'
+            encoder_scheduler = ExponentialLR(encoder_optimizer, gamma=0.9)
+            decoder_scheduler = ExponentialLR(decoder_optimizer, gamma=0.9)
+        
+        elif epoch >= 100 and epoch < 130:
+            # Warm_restart between 100 and 130 epochs
+            type_scheduler = 'warm_restarts'
+            encoder_scheduler = CosineAnnealingWarmRestarts(encoder_optimizer, T_0=0, T_mult=1)
+            decoder_scheduler = CosineAnnealingWarmRestarts(decoder_optimizer, T_0=0, T_mult=1)
+            
+        elif epoch >= 130:
+            # Reduce on plateau from 130 epochs and above
+            type_scheduler = 'reduce_on_plateau'
+            encoder_scheduler = ReduceLROnPlateau(encoder_optimizer, 'min')
+            decoder_scheduler = ReduceLROnPlateau(decoder_optimizer, 'min')
+        
+        schedulers = (encoder_scheduler, decoder_scheduler)
+    outputs['type_scheduler'] = type_scheduler
+    outputs['schedulers'] =  schedulers
+    outputs['decoder_optimizer'] =  decoder_optimizer
+    outputs['encoder_optimizer'] = encoder_optimizer
+        
+    return outputs
+
+
+def global_trainer(nbr_epochs, train_dataset, valid_dataset, params, encoder, decoder, 
+                   encoder_optimizer, decoder_optimizer,criterion, device, patience=10,
+                   tokenizer=BertTokenizer.from_pretrained('bert-base-uncased')):
+    """ Train the model for a certain number of epochs."""
     
     nb_params = sum(p.numel() for p in encoder.parameters() if p.requires_grad) + \
                 sum(p.numel() for p in decoder.parameters() if p.requires_grad)
@@ -327,6 +396,22 @@ def global_trainer(nbr_epochs, train_dataloader, valid_dataloader, encoder, deco
     best_val_loss = np.inf
     count = 0
     for epoch in range(nbr_epochs):
+        # Get the config 
+        config = get_optimizers_schedulers(encoder, decoder, epoch)
+        type_scheduler = config['type_scheduler']
+        if config['schedulers'] != None:
+            encoder_scheduler, decoder_scheduler = config['schedulers']
+        encoder_optimizer = config['encoder_optimizer']
+        decoder_optimizer = config['decoder_optimizer']       
+        
+        # Change the dataloader and batch size with the epoch
+        train_dataloader, batch_sz = get_dataloader_scheduler(train_dataset, params, epoch=epoch)
+        valid_dataloader, _ = get_dataloader_scheduler(valid_dataset, params, epoch=epoch)
+        
+        iters = len(train_dataloader)
+        encoder.batch_sz = batch_sz
+        decoder.batch_sz = batch_sz
+        
         with tqdm.tqdm(total=len(train_dataloader), file=sys.stdout, leave=True, desc='Epoch ', \
                        bar_format="{l_bar}{bar:20}{r_bar}{bar:-15b}") as pbar:  
             for phase in ['train', 'eval']:
@@ -344,14 +429,14 @@ def global_trainer(nbr_epochs, train_dataloader, valid_dataloader, encoder, deco
                     pbar.set_description('Epoch {:>8}'.format(epoch + 1))
                     inp, targ = inp.to(device), targ.to(device)
                     if phase == 'train':
-                        batch_loss = train_step(phase, inp, targ, encoder, decoder, encoder_optimizer,
-                                        decoder_optimizer, criterion,
-                                        device, batch_sz, targ_lang_tokenizer=tokenizer)
+                        batch_loss = train_step(iters, phase, batch, type_scheduler, inp, targ,
+                                                encoder, decoder, encoder_optimizer, decoder_optimizer, 
+                                                criterion, device, batch_sz, targ_lang_tokenizer=tokenizer)
                     else:
                         with torch.no_grad():
-                            batch_loss = train_step(phase, inp, targ, encoder, decoder, encoder_optimizer,
-                                        decoder_optimizer, criterion,
-                                        device, batch_sz, targ_lang_tokenizer=tokenizer)
+                            batch_loss = train_step(iters, phase, batch, type_scheduler, inp, targ,
+                                                    encoder, decoder, encoder_optimizer, decoder_optimizer,
+                                                    criterion, device, batch_sz, targ_lang_tokenizer=tokenizer)
                     total_loss += batch_loss
                 
                     if phase == 'train':
@@ -362,24 +447,29 @@ def global_trainer(nbr_epochs, train_dataloader, valid_dataloader, encoder, deco
                     else:
                         val_loss = total_loss / (batch + 1)
                         pbar.set_postfix_str('Train loss {:.4f} Eval loss {:.4f}'.format(train_loss, val_loss))
-                        time.sleep(1)  
-
+                        time.sleep(1)
+                    # Call the scheduler if the optimizer is not Adam
+                    if type_scheduler == 'expo_decay':
+                        encoder_scheduler.step()
+                        decoder_scheduler.step()
+                    elif  type_scheduler == 'reduce_on_plateau':         
+                        encoder_scheduler.step(val_loss)
+                        decoder_scheduler.step(val_loss)
+                        
         # saving (checkpoint) the model each epoch when we aren't overfitting
         
         if val_loss < best_val_loss:
-  
             best_val_loss = val_loss
             torch.save(encoder, 'encoder-s2t.pt')
             torch.save(decoder, 'decoder-s2t.pt')
         else:
-            count += 1
-            if count == patience:
-                print("\n")
-                print(" ----- EARLY STOPPING ----- ") 
-                break
+            if epoch >= 130:
+                count += 1
+                if count == patience:
+                    print("\n")
+                    print(" ----- EARLY STOPPING ----- ") 
+                    break
         
-        
-            
 
     print('\nTime taken for the training {:.5} hours\n'.format((time.time() - start) / 3600))
         

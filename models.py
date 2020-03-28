@@ -44,11 +44,11 @@ class ConvBase(nn.Module):
     
     
 class RnnBase(nn.Module):
-    def __init__(self, device, hidden_size, batch_size, bn_in_feat, gru_in_feat):
+    def __init__(self, device, hidden_size, batch_sz, bn_in_feat, gru_in_feat):
         super().__init__() 
         self.device = device
         self.hidden_size = hidden_size
-        self.batch_size = batch_size 
+        self.batch_sz = batch_sz 
         #self.batchnorm1d = nn.BatchNorm1d(bn_in_feat)
         self.gru = nn.GRU(gru_in_feat, self.hidden_size, batch_first=True, num_layers=1, bidirectional=True, dropout=0.2)
     
@@ -69,7 +69,7 @@ class RnnBase(nn.Module):
         # Pass through the dropout layer
         #output = self.dropout(output)
         # I don't know what i will do with but i collect the last state for the moment
-        #self.last_state = hidden.view(2,  self.batch_size, self.hidden_size)[-1,:,:].unsqueeze(0).to(self.device)
+        #self.last_state = hidden.view(2,  self.batch_sz, self.hidden_size)[-1,:,:].unsqueeze(0).to(self.device)
         hidden = hidden.view(1, 2,  -1, self.hidden_size)
         h_forward = hidden[:, 0, :, :]
         h_backward = hidden[:, 1, :, :]
@@ -81,10 +81,10 @@ class RnnBase(nn.Module):
         
     
 class EncoderCONV2DRNN(nn.Module):
-    def __init__(self, device, batch_size = 10, hidden_size=256):
+    def __init__(self, device, batch_sz = 10, hidden_size=256):
         super().__init__() 
         self.encoder_timestamp = 198
-        self.batch_size = batch_size
+        self.batch_sz = batch_sz
         self.conv_base = ConvBase(hidden_size)
         self.hidden_size = hidden_size
         self.device = device
@@ -95,12 +95,12 @@ class EncoderCONV2DRNN(nn.Module):
         self.norm_layer_5 = nn.LayerNorm((self.encoder_timestamp, hidden_size))
         self.norm_layer_6 = nn.LayerNorm((self.encoder_timestamp, hidden_size))
         
-        self.rnn_base_1 = RnnBase(device, hidden_size, batch_size, bn_in_feat=self.encoder_timestamp, gru_in_feat=1088)
-        self.rnn_base_2 = RnnBase(device, hidden_size, batch_size, bn_in_feat=self.encoder_timestamp, gru_in_feat=hidden_size)
-        self.rnn_base_3 = RnnBase(device, hidden_size, batch_size, bn_in_feat=self.encoder_timestamp, gru_in_feat=hidden_size)
-        self.rnn_base_4 = RnnBase(device, hidden_size, batch_size, bn_in_feat=self.encoder_timestamp, gru_in_feat=hidden_size)
-        self.rnn_base_5 = RnnBase(device, hidden_size, batch_size, bn_in_feat=self.encoder_timestamp, gru_in_feat=hidden_size)
-        self.rnn_base_6 = RnnBase(device, hidden_size, batch_size, bn_in_feat=self.encoder_timestamp, gru_in_feat=hidden_size)
+        self.rnn_base_1 = RnnBase(device, hidden_size, batch_sz, bn_in_feat=self.encoder_timestamp, gru_in_feat=1088)
+        self.rnn_base_2 = RnnBase(device, hidden_size, batch_sz, bn_in_feat=self.encoder_timestamp, gru_in_feat=hidden_size)
+        self.rnn_base_3 = RnnBase(device, hidden_size, batch_sz, bn_in_feat=self.encoder_timestamp, gru_in_feat=hidden_size)
+        self.rnn_base_4 = RnnBase(device, hidden_size, batch_sz, bn_in_feat=self.encoder_timestamp, gru_in_feat=hidden_size)
+        self.rnn_base_5 = RnnBase(device, hidden_size, batch_sz, bn_in_feat=self.encoder_timestamp, gru_in_feat=hidden_size)
+        self.rnn_base_6 = RnnBase(device, hidden_size, batch_sz, bn_in_feat=self.encoder_timestamp, gru_in_feat=hidden_size)
 
 
     def forward(self, mfccs, hidden):
@@ -139,7 +139,7 @@ class EncoderCONV2DRNN(nn.Module):
         return output, hidden
 
     def initialize_hidden_state(self):
-        return torch.zeros(2, self.batch_size, self.hidden_size, device=self.device)
+        return torch.zeros(2, self.batch_sz, self.hidden_size, device=self.device)
     
 
 
@@ -162,7 +162,7 @@ class bert_embedding_layer(nn.Module):
 class DecoderATTRNN(nn.Module):
     """Bahdanau Audio decoder"""
     
-    def __init__(self, vocab_size, dec_units, batch_sz, hidden_size):
+    def __init__(self, vocab_size, dec_units, batch_sz=10, hidden_size=256):
         
         super().__init__()
         self.batch_sz = batch_sz
@@ -185,11 +185,11 @@ class DecoderATTRNN(nn.Module):
  
     
     def forward(self, input, hidden, enc_output, prev_attn_weights):
-        # enc_output shape == (batch_size, max_length, hidden_size)
+        # enc_output shape == (batch_sz, max_length, hidden_size)
         context_vector, attention_weights, _ = self.attention(hidden, enc_output, prev_attn_weights)
-        # x shape after passing input through embedding == (batch_size, 1, embedding_dim)
+        # x shape after passing input through embedding == (batch_sz, 1, embedding_dim)
         x = self.embedding(input)
-        # x shape after concatenation == (batch_size, 1, embedding_dim + hidden_size)
+        # x shape after concatenation == (batch_sz, 1, embedding_dim + hidden_size)
         context_vector = torch.unsqueeze(context_vector, 1)
         x = torch.cat((context_vector, x), 2)
         # passing the concatenated vector to the GRU
@@ -210,9 +210,9 @@ class DecoderATTRNN(nn.Module):
         output = output + copy_output
         output = self.norm_layer_3(output)
         
-        # output shape == (batch_size * 1, hidden_size)
+        # output shape == (batch_sz * 1, hidden_size)
         output = output.reshape(-1, output.shape[2])
-        # output shape == (batch_size, vocab)
+        # output shape == (batch_sz, vocab)
         output = self.fc(output)
         output = F.log_softmax(output, dim=1)
 

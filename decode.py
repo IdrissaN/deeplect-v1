@@ -1,3 +1,13 @@
+            #########################################################
+            #                                                       #
+            #  This code is the private poperty of dialectai. It's  #
+            #  forbidden to copy it, use it or sell it outside of   # 
+            #  the company. Copyright - dialectai 2020.             #
+            #                                                       #
+            #########################################################
+
+
+            
 import os
 import re
 import csv
@@ -68,12 +78,12 @@ class BeamTreeNode(object):
         assert isinstance(node, BeamTreeNode)
         self.parent = node
         self.length = node.length + 1
-        self.inv_path += node.inv_path
+        self.inv_path += node.inv_path 
     
 
 
         
-def greedy_decode(mfccs, max_length_targ, encoder, decoder, targ_lang_tokenizer, device, enc_units=64, bad_audio_mode=True):
+def greedy_decode(mfccs, max_length_targ, encoder, decoder, targ_lang_tokenizer, device, enc_units=64):
 
     
     # Send the inputs matrix to device
@@ -89,15 +99,12 @@ def greedy_decode(mfccs, max_length_targ, encoder, decoder, targ_lang_tokenizer,
         dec_input = torch.tensor([[targ_lang_tokenizer.cls_token_id]], device=device)
         attention_weights = torch.zeros(1, 198, 1).to(device)
         for t in range(max_length_targ):
-            if bad_audio_mode:
-                predictions, dec_hidden, attention_weights = decoder(dec_input,
+
+            predictions, dec_hidden, attention_weights = decoder(dec_input,
                                                                      dec_hidden,
                                                                      enc_out,
                                                                      attention_weights)
-            else:  
-                predictions, dec_hidden, attention_weights = decoder(dec_input,
-                                                                     dec_hidden,
-                                                                     enc_out)
+
             # storing the attention weights to plot later on
             topv, topi = predictions.data.topk(1)
             result += targ_lang_tokenizer.convert_ids_to_tokens(topi.item()) + ' '
@@ -112,7 +119,7 @@ def greedy_decode(mfccs, max_length_targ, encoder, decoder, targ_lang_tokenizer,
     
         
 def beam_search_decode(mfccs, max_length_targ,  encoder, decoder,  targ_lang_tokenizer, device,
-                       nb_candidates, beam_width, alpha, enc_units=64, bad_audio_mode=True):
+                       nb_candidates, beam_width, alpha, enc_units=64):
 
     # Send the inputs matrix to device
     mfccs = torch.tensor(mfccs).to(device)
@@ -140,11 +147,8 @@ def beam_search_decode(mfccs, max_length_targ,  encoder, decoder,  targ_lang_tok
             for n in candidates:
                 if n.is_leaf and not n.is_end:
                     # étendre le noeud (faire les prédictions dessus)
-                    if bad_audio_mode:
-                        predictions, dec_hidden, attention_weights = decoder(n.wordid, n.h, enc_out,
-                                                                             attention_weights)
-                    else:
-                        predictions, dec_hidden, attention_weights = decoder(n.wordid, n.h, enc_out)
+                    predictions, dec_hidden, attention_weights = decoder(n.wordid, n.h, enc_out, attention_weights)
+
                     # Pour signaler que le noeud est déjà étendu (utilisé)
                     n.is_leaf = False
                     # prendre le nombre de candidats choisis 
@@ -154,23 +158,20 @@ def beam_search_decode(mfccs, max_length_targ,  encoder, decoder,  targ_lang_tok
                     for val, ind in zip(top_width_v[0], top_width_i[0]):
                         count += 1
                         dec_input = torch.tensor([[ind.item()]], device=device)
-                        logproba = - val + n.logp
+                        logproba = - torch.log(val) + n.logp 
                         node = BeamTreeNode(name=str(count), hidden_state=dec_hidden, wordid=dec_input, logp=logproba)
                         # Rajouter le noeud à la priority queue
                         all_nodes.put(node)
                         # Indiquer que les nouveaux noeuds sont des enfants du noeud initial 
                         n.add_child(node)
                         node.add_parent(n)
-                        # Si on prédit la fin ou que la longueur maximale est atteinte
+                        # Si on prédit la fin rajouter à endnodes
                         if targ_lang_tokenizer.convert_ids_to_tokens(ind.item()) == '[SEP]':
                             node.is_end = True 
                             endnodes.append(node)
        
             # Retenir que les beam width meilleurs           
-            candidates = [all_nodes.get() for step in range(beam_width)]
-            #candidates = [node for _, node in candidates]
-            candidates = [node for node in candidates]
-            
+            candidates = [all_nodes.get() for step in range(beam_width)]    
         # Last step before the result 
         final_queue = PriorityQueue()
         final_candidates = candidates + endnodes
@@ -183,8 +184,8 @@ def beam_search_decode(mfccs, max_length_targ,  encoder, decoder,  targ_lang_tok
         _, node = final_queue.get()
         # Find the path
         for elem in node.path:
-            if elem != 0:
-                result += targ_lang_tokenizer.convert_ids_to_tokens(elem) + ' '
+            #if elem != 0: # POurquoi ?
+            result += targ_lang_tokenizer.convert_ids_to_tokens(elem) + ' '
 
         return result        
         
