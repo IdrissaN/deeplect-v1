@@ -454,15 +454,14 @@ def global_trainer(nbr_epochs, train_dataset, valid_dataset, params, encoder, de
                         pbar.set_postfix_str('Train loss {:.4f}'.format(train_loss))
                         pbar.update(1)
                         time.sleep(1)
-                        # Write into the tensorboard
-                        writer.add_scalar('training loss',
-                            train_loss ,
-                            epoch * len(train_dataloader) + batch)
+
                         
                     else:
                         val_loss = total_loss / (batch + 1)
                         pbar.set_postfix_str('Train loss {:.4f} Eval loss {:.4f}'.format(train_loss, val_loss))
                         time.sleep(1)
+                        
+                        
                     # Call the scheduler if the optimizer is not Adam
                     if type_scheduler == 'expo_decay':
                         encoder_scheduler.step()
@@ -470,6 +469,69 @@ def global_trainer(nbr_epochs, train_dataset, valid_dataset, params, encoder, de
                     elif  type_scheduler == 'reduce_on_plateau':         
                         encoder_scheduler.step(val_loss)
                         decoder_scheduler.step(val_loss)
+                        
+
+        # Write into the tensorboard log to allow to plot the training's history
+        writer.add_scalars('Loss', {'train': train_loss , 'val': val_loss}, epoch)
+        # Conv_base
+        writer.add_histogram('Encoder-conv_base/conv2d_1.weight', encoder.conv_base.conv2d_1.weight, epoch)
+        writer.add_histogram('Encoder-conv_base/conv2d_1.bias', encoder.conv_base.conv2d_1.bias, epoch)
+        
+        writer.add_histogram('Encoder-conv_base/conv2d_2.weight', encoder.conv_base.conv2d_2.weight, epoch)
+        writer.add_histogram('Encoder-conv_base/conv2d_2.bias', encoder.conv_base.conv2d_2.bias, epoch)
+        
+        #encoder norm layers
+        writer.add_histogram('Encoder-norm/norm_layer_1.weight', encoder.norm_layer_1.weight, epoch)
+        writer.add_histogram('Encoder-norm/norm_layer_2.weight', encoder.norm_layer_2.weight, epoch)
+        writer.add_histogram('Encoder-norm/norm_layer_3.weight', encoder.norm_layer_3.weight, epoch)
+        writer.add_histogram('Encoder-norm/norm_layer_4.weight', encoder.norm_layer_4.weight, epoch)
+        writer.add_histogram('Encoder-norm/norm_layer_5.weight', encoder.norm_layer_5.weight, epoch)
+        writer.add_histogram('Encoder-norm/norm_layer_6.weight', encoder.norm_layer_6.weight, epoch)
+        
+        
+        #encoder rnn_base
+        writer.add_histogram('Encoder-rnn/rnn_base_1.gru.weight_hh_l0', encoder.rnn_base_1.gru.weight_hh_l0, epoch)
+        writer.add_histogram('Encoder-rnn/rnn_base_1.gru.weight_hh_l0_rev', encoder.rnn_base_1.gru.weight_hh_l0_reverse, 
+                             epoch)
+        writer.add_histogram('Encoder-rnn/rnn_base_1.gru.weight_ih_l0', encoder.rnn_base_1.gru.weight_ih_l0, epoch)
+        writer.add_histogram('Encoder-rnn/rnn_base_1.gru.weight_ih_l0_rev', encoder.rnn_base_1.gru.weight_ih_l0_reverse, 
+                             epoch)
+  
+        writer.add_histogram('Encoder-rnn/rnn_base_2.gru.weight_hh_l0', encoder.rnn_base_2.gru.weight_hh_l0, epoch)
+        writer.add_histogram('Encoder-rnn/rnn_base_2.gru.weight_hh_l0_rev', encoder.rnn_base_2.gru.weight_hh_l0_reverse, 
+                             epoch)
+        writer.add_histogram('Encoder-rnn/rnn_base_2.gru.weight_ih_l0', encoder.rnn_base_2.gru.weight_ih_l0, epoch)
+        writer.add_histogram('Encoder-rnn/rnn_base_2.gru.weight_ih_l0_rev', encoder.rnn_base_2.gru.weight_ih_l0_reverse, 
+                             epoch)        
+        
+        writer.add_histogram('Encoder-rnn/rnn_base_3.gru.weight_hh_l0', encoder.rnn_base_3.gru.weight_hh_l0, epoch)
+        writer.add_histogram('Encoder-rnn/rnn_base_3.gru.weight_hh_l0_reverse', encoder.rnn_base_3.gru.weight_hh_l0_reverse, 
+                             epoch)
+        writer.add_histogram('Encoder-rnn/rnn_base_3.gru.weight_ih_l0', encoder.rnn_base_3.gru.weight_ih_l0, epoch)
+        writer.add_histogram('Encoder-rnn/rnn_base_3.gru.weight_ih_l0_rev', encoder.rnn_base_3.gru.weight_ih_l0_reverse, 
+                             epoch)  
+        writer.add_histogram('Encoder-rnn/rnn_base_4.gru.weight_hh_l0', encoder.rnn_base_4.gru.weight_hh_l0, epoch)
+        writer.add_histogram('Encoder-rnn/rnn_base_4.gru.weight_hh_l0_rev', encoder.rnn_base_4.gru.weight_hh_l0_reverse, 
+                             epoch)
+        writer.add_histogram('Encoder-rnn/rnn_base_4.gru.weight_ih_l0', encoder.rnn_base_4.gru.weight_ih_l0, epoch)
+        writer.add_histogram('Encoder-rnn/rnn_base_4.gru.weight_ih_l0_rev', encoder.rnn_base_4.gru.weight_ih_l0_reverse, 
+                             epoch)
+  
+        writer.add_histogram('Encoder-rnn/rnn_base_5.gru.weight_hh_l0', encoder.rnn_base_5.gru.weight_hh_l0, epoch)
+        writer.add_histogram('Encoder-rnn/rnn_base_5.gru.weight_hh_l0_rev', encoder.rnn_base_5.gru.weight_hh_l0_reverse, 
+                             epoch)
+        writer.add_histogram('Encoder-rnn/rnn_base_5.gru.weight_ih_l0', encoder.rnn_base_5.gru.weight_ih_l0, epoch)
+        writer.add_histogram('Encoder-rnn/rnn_base_5.gru.weight_ih_l0_rev', encoder.rnn_base_5.gru.weight_ih_l0_reverse, 
+                             epoch)        
+        
+        writer.add_histogram('Encoder-rnn/rnn_base_6.gru.weight_hh_l0', encoder.rnn_base_6.gru.weight_hh_l0, epoch)
+        writer.add_histogram('Encoder-rnn/rnn_base_6.gru.weight_hh_l0_rev', encoder.rnn_base_6.gru.weight_hh_l0_reverse, 
+                             epoch)
+        writer.add_histogram('Encoder-rnn/rnn_base_6.gru.weight_ih_l0', encoder.rnn_base_6.gru.weight_ih_l0, epoch)
+        writer.add_histogram('Encoder-rnn/rnn_base_6.gru.weight_ih_l0_rev', encoder.rnn_base_6.gru.weight_ih_l0_reverse, 
+                             epoch)  
+
+        writer.flush()
                         
         # saving (checkpoint) the model each epoch when we aren't overfitting
         
