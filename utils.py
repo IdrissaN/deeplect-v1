@@ -27,9 +27,11 @@ import torchaudio
 from queue import PriorityQueue
 from torch.utils import data
 import torch.nn as nn
+from datetime import date
 import torch.optim as optim
 from transformers import BertTokenizer
 from torch.nn.utils.rnn import pad_sequence
+from torch.utils.tensorboard import SummaryWriter
 from SpecAugment import spec_augment_pytorch
 from nltk.translate.bleu_score import sentence_bleu as bleu
 from torchaudio.datasets.utils import (download_url, extract_archive,
@@ -380,9 +382,17 @@ def get_optimizers_schedulers(encoder, decoder, epoch):
 
 
 def global_trainer(nbr_epochs, train_dataset, valid_dataset, params, encoder, decoder, 
-                   encoder_optimizer, decoder_optimizer,criterion, device, patience=10,
-                   tokenizer=BertTokenizer.from_pretrained('bert-base-uncased')):
+                   encoder_optimizer, decoder_optimizer,criterion, device, patience=20,
+                   tokenizer=BertTokenizer.from_pretrained('bert-base-uncased'), model_name='deeplect-v1'):
     """ Train the model for a certain number of epochs."""
+    # The day when the training starts
+    day = date.today().strftime("%d-%m-%y")
+    
+    # The writer for tensorboard
+    summary_path = 'runs/{}/{}'.format(model_name, day)
+    writer = SummaryWriter(summary_path)
+    
+
     
     nb_params = sum(p.numel() for p in encoder.parameters() if p.requires_grad) + \
                 sum(p.numel() for p in decoder.parameters() if p.requires_grad)
@@ -444,6 +454,11 @@ def global_trainer(nbr_epochs, train_dataset, valid_dataset, params, encoder, de
                         pbar.set_postfix_str('Train loss {:.4f}'.format(train_loss))
                         pbar.update(1)
                         time.sleep(1)
+                        # Write into the tensorboard
+                        writer.add_scalar('training loss',
+                            train_loss ,
+                            epoch * len(train_dataloader) + batch)
+                        
                     else:
                         val_loss = total_loss / (batch + 1)
                         pbar.set_postfix_str('Train loss {:.4f} Eval loss {:.4f}'.format(train_loss, val_loss))
@@ -469,7 +484,8 @@ def global_trainer(nbr_epochs, train_dataset, valid_dataset, params, encoder, de
                     print("\n")
                     print(" ----- EARLY STOPPING ----- ") 
                     break
-        
+                    
+    writer.close()
 
     print('\nTime taken for the training {:.5} hours\n'.format((time.time() - start) / 3600))
         
