@@ -454,13 +454,11 @@ def global_trainer(nbr_epochs, train_dataset, valid_dataset, params, encoder, de
                         pbar.set_postfix_str('Train loss {:.4f}'.format(train_loss))
                         pbar.update(1)
                         time.sleep(1)
-
                         
                     else:
                         val_loss = total_loss / (batch + 1)
                         pbar.set_postfix_str('Train loss {:.4f} Eval loss {:.4f}'.format(train_loss, val_loss))
-                        time.sleep(1)
-                        
+                        time.sleep(1)  
                         
                     # Call the scheduler if the optimizer is not Adam
                     if type_scheduler == 'expo_decay':
@@ -473,10 +471,9 @@ def global_trainer(nbr_epochs, train_dataset, valid_dataset, params, encoder, de
 
         # Write into the tensorboard log to allow to plot the training's history
         writer.add_scalars('Loss', {'train': train_loss , 'val': val_loss}, epoch)
-        # Conv_base
+        # Encoder Conv_base
         writer.add_histogram('Encoder-conv_base/conv2d_1.weight', encoder.conv_base.conv2d_1.weight, epoch)
         writer.add_histogram('Encoder-conv_base/conv2d_1.bias', encoder.conv_base.conv2d_1.bias, epoch)
-        
         writer.add_histogram('Encoder-conv_base/conv2d_2.weight', encoder.conv_base.conv2d_2.weight, epoch)
         writer.add_histogram('Encoder-conv_base/conv2d_2.bias', encoder.conv_base.conv2d_2.bias, epoch)
         
@@ -488,59 +485,58 @@ def global_trainer(nbr_epochs, train_dataset, valid_dataset, params, encoder, de
         writer.add_histogram('Encoder-norm/norm_layer_5.weight', encoder.norm_layer_5.weight, epoch)
         writer.add_histogram('Encoder-norm/norm_layer_6.weight', encoder.norm_layer_6.weight, epoch)
         
-        
         #encoder rnn_base
         writer.add_histogram('Encoder-rnn/rnn_base_1.gru.weight_hh_l0', encoder.rnn_base_1.gru.weight_hh_l0, epoch)
-        writer.add_histogram('Encoder-rnn/rnn_base_1.gru.weight_hh_l0_rev', encoder.rnn_base_1.gru.weight_hh_l0_reverse, 
-                             epoch)
+        writer.add_histogram('Encoder-rnn/rnn_base_1.gru.weight_hh_l0_rev', encoder.rnn_base_1.gru.weight_hh_l0_reverse, epoch)
         writer.add_histogram('Encoder-rnn/rnn_base_1.gru.weight_ih_l0', encoder.rnn_base_1.gru.weight_ih_l0, epoch)
-        writer.add_histogram('Encoder-rnn/rnn_base_1.gru.weight_ih_l0_rev', encoder.rnn_base_1.gru.weight_ih_l0_reverse, 
-                             epoch)
-  
+        writer.add_histogram('Encoder-rnn/rnn_base_1.gru.weight_ih_l0_rev', encoder.rnn_base_1.gru.weight_ih_l0_reverse, epoch)
         writer.add_histogram('Encoder-rnn/rnn_base_2.gru.weight_hh_l0', encoder.rnn_base_2.gru.weight_hh_l0, epoch)
-        writer.add_histogram('Encoder-rnn/rnn_base_2.gru.weight_hh_l0_rev', encoder.rnn_base_2.gru.weight_hh_l0_reverse, 
-                             epoch)
+        writer.add_histogram('Encoder-rnn/rnn_base_2.gru.weight_hh_l0_rev', encoder.rnn_base_2.gru.weight_hh_l0_reverse, epoch)
         writer.add_histogram('Encoder-rnn/rnn_base_2.gru.weight_ih_l0', encoder.rnn_base_2.gru.weight_ih_l0, epoch)
-        writer.add_histogram('Encoder-rnn/rnn_base_2.gru.weight_ih_l0_rev', encoder.rnn_base_2.gru.weight_ih_l0_reverse, 
-                             epoch)        
-        
+        writer.add_histogram('Encoder-rnn/rnn_base_2.gru.weight_ih_l0_rev', encoder.rnn_base_2.gru.weight_ih_l0_reverse, epoch) 
         writer.add_histogram('Encoder-rnn/rnn_base_3.gru.weight_hh_l0', encoder.rnn_base_3.gru.weight_hh_l0, epoch)
-        writer.add_histogram('Encoder-rnn/rnn_base_3.gru.weight_hh_l0_reverse', encoder.rnn_base_3.gru.weight_hh_l0_reverse, 
-                             epoch)
+        writer.add_histogram('Encoder-rnn/rnn_base_3.gru.weight_hh_l0_rev', encoder.rnn_base_3.gru.weight_hh_l0_reverse,epoch)
         writer.add_histogram('Encoder-rnn/rnn_base_3.gru.weight_ih_l0', encoder.rnn_base_3.gru.weight_ih_l0, epoch)
-        writer.add_histogram('Encoder-rnn/rnn_base_3.gru.weight_ih_l0_rev', encoder.rnn_base_3.gru.weight_ih_l0_reverse, 
-                             epoch)  
+        writer.add_histogram('Encoder-rnn/rnn_base_3.gru.weight_ih_l0_rev', encoder.rnn_base_3.gru.weight_ih_l0_reverse, epoch) 
         writer.add_histogram('Encoder-rnn/rnn_base_4.gru.weight_hh_l0', encoder.rnn_base_4.gru.weight_hh_l0, epoch)
-        writer.add_histogram('Encoder-rnn/rnn_base_4.gru.weight_hh_l0_rev', encoder.rnn_base_4.gru.weight_hh_l0_reverse, 
-                             epoch)
+        writer.add_histogram('Encoder-rnn/rnn_base_4.gru.weight_hh_l0_rev', encoder.rnn_base_4.gru.weight_hh_l0_reverse, epoch)
         writer.add_histogram('Encoder-rnn/rnn_base_4.gru.weight_ih_l0', encoder.rnn_base_4.gru.weight_ih_l0, epoch)
-        writer.add_histogram('Encoder-rnn/rnn_base_4.gru.weight_ih_l0_rev', encoder.rnn_base_4.gru.weight_ih_l0_reverse, 
-                             epoch)
-  
+        writer.add_histogram('Encoder-rnn/rnn_base_4.gru.weight_ih_l0_rev', encoder.rnn_base_4.gru.weight_ih_l0_reverse, epoch)
         writer.add_histogram('Encoder-rnn/rnn_base_5.gru.weight_hh_l0', encoder.rnn_base_5.gru.weight_hh_l0, epoch)
-        writer.add_histogram('Encoder-rnn/rnn_base_5.gru.weight_hh_l0_rev', encoder.rnn_base_5.gru.weight_hh_l0_reverse, 
-                             epoch)
+        writer.add_histogram('Encoder-rnn/rnn_base_5.gru.weight_hh_l0_rev', encoder.rnn_base_5.gru.weight_hh_l0_reverse, epoch)
         writer.add_histogram('Encoder-rnn/rnn_base_5.gru.weight_ih_l0', encoder.rnn_base_5.gru.weight_ih_l0, epoch)
-        writer.add_histogram('Encoder-rnn/rnn_base_5.gru.weight_ih_l0_rev', encoder.rnn_base_5.gru.weight_ih_l0_reverse, 
-                             epoch)        
-        
+        writer.add_histogram('Encoder-rnn/rnn_base_5.gru.weight_ih_l0_rev', encoder.rnn_base_5.gru.weight_ih_l0_reverse, epoch) 
         writer.add_histogram('Encoder-rnn/rnn_base_6.gru.weight_hh_l0', encoder.rnn_base_6.gru.weight_hh_l0, epoch)
-        writer.add_histogram('Encoder-rnn/rnn_base_6.gru.weight_hh_l0_rev', encoder.rnn_base_6.gru.weight_hh_l0_reverse, 
-                             epoch)
+        writer.add_histogram('Encoder-rnn/rnn_base_6.gru.weight_hh_l0_rev', encoder.rnn_base_6.gru.weight_hh_l0_reverse, epoch)
         writer.add_histogram('Encoder-rnn/rnn_base_6.gru.weight_ih_l0', encoder.rnn_base_6.gru.weight_ih_l0, epoch)
-        writer.add_histogram('Encoder-rnn/rnn_base_6.gru.weight_ih_l0_rev', encoder.rnn_base_6.gru.weight_ih_l0_reverse, 
-                             epoch)  
+        writer.add_histogram('Encoder-rnn/rnn_base_6.gru.weight_ih_l0_rev', encoder.rnn_base_6.gru.weight_ih_l0_reverse, epoch) 
+        
+        # Decoder writer 
+        writer.add_histogram('Decoder-rnn/gru_1.weight_hh_l0', decoder.gru_1.weight_hh_l0, epoch)
+        writer.add_histogram('Decoder-rnn/gru_1.weight_ih_l0', decoder.gru_1.weight_ih_l0, epoch)
+        writer.add_histogram('Decoder-rnn/gru_2.weight_hh_l0', decoder.gru_2.weight_hh_l0, epoch)
+        writer.add_histogram('Decoder-rnn/gru_2.weight_ih_l0', decoder.gru_2.weight_ih_l0, epoch)
+        writer.add_histogram('Decoder-rnn/gru_3.weight_hh_l0', decoder.gru_3.weight_hh_l0, epoch)
+        writer.add_histogram('Decoder-rnn/gru_3.weight_ih_l0', decoder.gru_3.weight_ih_l0, epoch)
+        writer.add_histogram('Decoder-rnn/gru_4.weight_hh_l0', decoder.gru_4.weight_hh_l0, epoch)
+        writer.add_histogram('Decoder-rnn/gru_4.weight_ih_l0', decoder.gru_4.weight_ih_l0, epoch)
+        
+        
 
+        #encoder norm layers
+        writer.add_histogram('Decoder-norm/norm_layer_1.weight', decoder.norm_layer_1.weight, epoch)
+        writer.add_histogram('Decoder-norm/norm_layer_2.weight', decoder.norm_layer_2.weight, epoch)
+        writer.add_histogram('Decoder-norm/norm_layer_3.weight', decoder.norm_layer_3.weight, epoch)
+        
         writer.flush()
                         
         # saving (checkpoint) the model each epoch when we aren't overfitting
-        
         if val_loss < best_val_loss:
             best_val_loss = val_loss
             torch.save(encoder, 'encoder-s2t.pt')
             torch.save(decoder, 'decoder-s2t.pt')
         else:
-            if epoch >= 130:
+            if epoch >= 130: # We perform early stopping only at the last stage
                 count += 1
                 if count == patience:
                     print("\n")
