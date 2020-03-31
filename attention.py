@@ -70,14 +70,14 @@ class BahdanauAttentionAudio(nn.Module):
 
 class SuperHeadAttention(nn.Module):
     
-    def __init__(self, units, hidden_size, encoder_timestamps=198):
+    def __init__(self, units, hidden_size, encoder_timestamp):
         super().__init__()
         self.nbr_heads = 3
-        self.encoder_timestamps = encoder_timestamps
+        self.encoder_timestamps = encoder_timestamp
         self.W = nn.Linear(self.nbr_heads, 1)
-        self.attention_1 = BahdanauAttentionAudio(units=units, hidden_size=hidden_size, encoder_timestamps=encoder_timestamps)
-        self.attention_2 = BahdanauAttentionAudio(units=units, hidden_size=hidden_size, encoder_timestamps=encoder_timestamps)
-        self.attention_3 = BahdanauAttentionAudio(units=units, hidden_size=hidden_size, encoder_timestamps=encoder_timestamps)
+        self.attention_1 = BahdanauAttentionAudio(units=units, hidden_size=hidden_size, encoder_timestamps=encoder_timestamp)
+        self.attention_2 = BahdanauAttentionAudio(units=units, hidden_size=hidden_size, encoder_timestamps=encoder_timestamp)
+        self.attention_3 = BahdanauAttentionAudio(units=units, hidden_size=hidden_size, encoder_timestamps=encoder_timestamp)
 
         
     def forward(self, query, values, prev_att):

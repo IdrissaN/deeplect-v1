@@ -21,22 +21,55 @@ for param in model_features.parameters():
     param.requires_grad = False
     
     
+    
+def dim_calcul_conv2d(N, C_in, H_in, W_in, layer):
+
+    padding = layer.padding
+    stride = layer.stride
+    dilation = layer.dilation
+    kernel_size = layer.kernel_size
+    C_out = layer.out_channels
+
+    H_out = 1 + (H_in + 2 * padding[0] - dilation[0] * (kernel_size[0] - 1) - 1) // stride[0]
+    W_out = 1 + (W_in + 2 * padding[1] - dilation[1] * (kernel_size[1] - 1) - 1) // stride[1]
+        
+    return (N, C_out, H_out, W_out)
+
+
+def dim_calcul_avg_pool2d(N, C_in, H_in, W_in, layer):
+
+    padding = layer.padding
+    kernel_size = layer.kernel_size
+    stride = layer.stride
+    C_out = C_in
+    H_out = 1 + (H_in + 2 * padding[0] - kernel_size[0]) // stride[0]
+    W_out = 1 + (W_in + 2 * padding[1] - kernel_size[1]) // stride[1]
+        
+    return (N, C_out, H_out, W_out)
+    
+    
 class ConvBase(nn.Module):
-    def __init__(self, hidden_size):
+    def __init__(self, hidden_size, batch_sz=16, spec_dim=(1, 39, 800)):
         super().__init__() 
         self.hidden_size = hidden_size
-        self.avg_pool_1 = nn.AvgPool2d(kernel_size=3, stride=(2,3))
+        self.avg_pool_1 = nn.AvgPool2d(kernel_size=(3,3) , stride=(2,3), padding=(0,0))
         self.batchnorm2d_1 = nn.BatchNorm2d(hidden_size)
         self.conv2d_1 = nn.Conv2d(in_channels=1, out_channels=256, kernel_size=3, stride=1, dilation=1)
-        self.conv2d_2 = nn.Conv2d(in_channels=256, out_channels=self.hidden_size, kernel_size=3, 
-                                  stride=1, dilation=1)
+        self.conv2d_2 = nn.Conv2d(in_channels=256, out_channels=self.hidden_size, kernel_size=3, stride=1, dilation=1)
+        # Compute the dimension that we will give to  the GRU
+        output_dim_1 = dim_calcul_conv2d(batch_sz, *spec_dim, self.conv2d_1)
+        output_dim_2 = dim_calcul_conv2d(*output_dim_1, self.conv2d_2)
+        output_dim_3 = dim_calcul_avg_pool2d(*output_dim_2, self.avg_pool_1)
+        self.input_gru_dim = output_dim_3[1] * output_dim_3[2]
+        self.encoder_timestamp = output_dim_3[-1]
+
     
     def forward(self, mfccs):
         # Started with the convolutionnal base
         conv_layer = self.conv2d_1(mfccs)
         conv_layer = self.conv2d_2(F.relu(conv_layer))
         conv_layer = self.batchnorm2d_1(F.relu(conv_layer))
-        avg_layer = self.avg_pool_1(conv_layer)        
+        avg_layer = self.avg_pool_1(conv_layer) 
         # Reshape from (batch, channels, features, time) ----> (batch, time, channels * features)
         dim_0, dim_1, dim_2, dim_3 = avg_layer.shape
         output = avg_layer.reshape(dim_0, dim_3, dim_1 * dim_2)
@@ -83,11 +116,12 @@ class RnnBase(nn.Module):
 class EncoderCONV2DRNN(nn.Module):
     def __init__(self, device, batch_sz = 10, hidden_size=256):
         super().__init__() 
-        self.encoder_timestamp = 198
+        
         self.batch_sz = batch_sz
         self.conv_base = ConvBase(hidden_size)
-        self.hidden_size = hidden_size
         self.device = device
+        self.hidden_size = hidden_size
+        self.encoder_timestamp = self.conv_base.encoder_timestamp
         self.norm_layer_1 = nn.LayerNorm((self.encoder_timestamp, hidden_size))
         self.norm_layer_2 = nn.LayerNorm((self.encoder_timestamp, hidden_size))
         self.norm_layer_3 = nn.LayerNorm((self.encoder_timestamp, hidden_size))
@@ -95,7 +129,8 @@ class EncoderCONV2DRNN(nn.Module):
         self.norm_layer_5 = nn.LayerNorm((self.encoder_timestamp, hidden_size))
         self.norm_layer_6 = nn.LayerNorm((self.encoder_timestamp, hidden_size))
         
-        self.rnn_base_1 = RnnBase(device, hidden_size, batch_sz, bn_in_feat=self.encoder_timestamp, gru_in_feat=1088)
+        self.rnn_base_1 = RnnBase(device, hidden_size, batch_sz, bn_in_feat=self.encoder_timestamp, 
+                                  gru_in_feat=self.conv_base.input_gru_dim)
         self.rnn_base_2 = RnnBase(device, hidden_size, batch_sz, bn_in_feat=self.encoder_timestamp, gru_in_feat=hidden_size)
         self.rnn_base_3 = RnnBase(device, hidden_size, batch_sz, bn_in_feat=self.encoder_timestamp, gru_in_feat=hidden_size)
         self.rnn_base_4 = RnnBase(device, hidden_size, batch_sz, bn_in_feat=self.encoder_timestamp, gru_in_feat=hidden_size)
@@ -108,6 +143,7 @@ class EncoderCONV2DRNN(nn.Module):
         # Convolutionnal base
         output = self.conv_base(mfccs)
         # Sequential bloc
+        #print("sortie", output.shape)
         output, _ = self.rnn_base_1(output, hidden)
         output = self.norm_layer_1(output)
         copy_output = output.clone()
@@ -162,7 +198,7 @@ class bert_embedding_layer(nn.Module):
 class DecoderATTRNN(nn.Module):
     """Bahdanau Audio decoder"""
     
-    def __init__(self, vocab_size, dec_units, batch_sz=10, hidden_size=256):
+    def __init__(self, vocab_size, dec_units, batch_sz=10, hidden_size=256, encoder_timestamp=265):
         
         super().__init__()
         self.batch_sz = batch_sz
@@ -181,7 +217,7 @@ class DecoderATTRNN(nn.Module):
         self.fc = nn.Linear(hidden_size, vocab_size)
         # used for attention
         #self.attention = BahdanauAttentionAudio(units=dec_units, hidden_size=hidden_size)
-        self.attention =  SuperHeadAttention(units=dec_units, hidden_size=hidden_size)
+        self.attention =  SuperHeadAttention(dec_units, hidden_size, encoder_timestamp)
  
     
     def forward(self, input, hidden, enc_output, prev_attn_weights):

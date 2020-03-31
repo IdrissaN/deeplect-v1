@@ -272,7 +272,7 @@ def train_step(iters, phase, batch, type_scheduler, input_tensor, target_tensor,
     decoder_optimizer.zero_grad()
     target_length = target_tensor.size(1)
     # Encode the input sentence
-    decoder_attention = torch.zeros(batch_sz, 198, 1).to(device)
+    decoder_attention = torch.zeros(batch_sz, encoder.encoder_timestamp, 1).to(device)
     encoder_outputs, encoder_hidden = encoder(input_tensor, encoder_hidden)
     
     
