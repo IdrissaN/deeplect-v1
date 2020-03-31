@@ -29,7 +29,6 @@ def dim_calcul_conv2d(N, C_in, H_in, W_in, layer):
     dilation = layer.dilation
     kernel_size = layer.kernel_size
     C_out = layer.out_channels
-
     H_out = 1 + (H_in + 2 * padding[0] - dilation[0] * (kernel_size[0] - 1) - 1) // stride[0]
     W_out = 1 + (W_in + 2 * padding[1] - dilation[1] * (kernel_size[1] - 1) - 1) // stride[1]
         
@@ -98,11 +97,8 @@ class RnnBase(nn.Module):
         # Sum the forward pass and the backward to form the output
         output = forward + backward
         output = F.relu(output)
-        #output = self.batchnorm1d(output)
         # Pass through the dropout layer
-        #output = self.dropout(output)
         # I don't know what i will do with but i collect the last state for the moment
-        #self.last_state = hidden.view(2,  self.batch_sz, self.hidden_size)[-1,:,:].unsqueeze(0).to(self.device)
         hidden = hidden.view(1, 2,  -1, self.hidden_size)
         h_forward = hidden[:, 0, :, :]
         h_backward = hidden[:, 1, :, :]
@@ -143,7 +139,6 @@ class EncoderCONV2DRNN(nn.Module):
         # Convolutionnal base
         output = self.conv_base(mfccs)
         # Sequential bloc
-        #print("sortie", output.shape)
         output, _ = self.rnn_base_1(output, hidden)
         output = self.norm_layer_1(output)
         copy_output = output.clone()
@@ -231,21 +226,17 @@ class DecoderATTRNN(nn.Module):
         # passing the concatenated vector to the GRU
         output, _ = self.gru_1(x)
         copy_output = output.clone()
-        
         output, _ = self.gru_2(output)
         output = output + copy_output
         output = self.norm_layer_1(output)
         copy_output = output.clone()
-
         output, _ = self.gru_3(output)
         output = output + copy_output
         output = self.norm_layer_2(output)
         copy_output = output.clone()
-        
         output, state = self.gru_4(output)
         output = output + copy_output
         output = self.norm_layer_3(output)
-        
         # output shape == (batch_sz * 1, hidden_size)
         output = output.reshape(-1, output.shape[2])
         # output shape == (batch_sz, vocab)
