@@ -83,7 +83,7 @@ class BeamTreeNode(object):
 
 
         
-def greedy_decode(mfccs, max_length_targ, encoder, decoder, targ_lang_tokenizer, device, enc_units=64):
+def greedy_decode(mfccs, max_length_targ, encoder, decoder, targ_lang_tokenizer, device, enc_units=256, encoder_timestamp=265):
 
     
     # Send the inputs matrix to device
@@ -97,7 +97,7 @@ def greedy_decode(mfccs, max_length_targ, encoder, decoder, targ_lang_tokenizer,
         enc_out, enc_hidden = encoder(mfccs, enc_hidden)
         dec_hidden = enc_hidden
         dec_input = torch.tensor([[targ_lang_tokenizer.cls_token_id]], device=device)
-        attention_weights = torch.zeros(1, 198, 1).to(device)
+        attention_weights = torch.zeros(1, encoder_timestamp, 1).to(device)
         for t in range(max_length_targ):
 
             predictions, dec_hidden, attention_weights = decoder(dec_input,
@@ -119,7 +119,7 @@ def greedy_decode(mfccs, max_length_targ, encoder, decoder, targ_lang_tokenizer,
     
         
 def beam_search_decode(mfccs, max_length_targ,  encoder, decoder,  targ_lang_tokenizer, device,
-                       nb_candidates, beam_width, alpha, enc_units=64):
+                       nb_candidates, beam_width, alpha, enc_units=256, encoder_timestamp=265):
 
     # Send the inputs matrix to device
     mfccs = torch.tensor(mfccs).to(device)
@@ -128,7 +128,7 @@ def beam_search_decode(mfccs, max_length_targ,  encoder, decoder,  targ_lang_tok
 
     with torch.no_grad():
         hidden = torch.zeros(2, 1, enc_units, device=device)
-        attention_weights = torch.zeros(1, 198, 1).to(device)
+        attention_weights = torch.zeros(1, encoder_timestamp, 1).to(device)
         
         enc_out, enc_hidden = encoder(mfccs, hidden)
 

@@ -288,9 +288,12 @@ def train_step(iters, phase, batch, type_scheduler, input_tensor, target_tensor,
     #if use_teacher_forcing:
     # Teacher forcing: Feed the target as the next input to help the model
     # in case it starts with the wrong word.
+
     for di in range(1, target_length):
         decoder_output, decoder_hidden, decoder_attention = decoder(decoder_input, decoder_hidden,
                                                                     encoder_outputs, decoder_attention)
+        
+        
         loss += criterion(decoder_output, target_tensor[:, di])
         if use_teacher_forcing:
             decoder_input = torch.unsqueeze(target_tensor[:, di], 1)  # Teacher forcing
@@ -320,19 +323,19 @@ def get_dataloader_scheduler(dataset, params, epoch):
         params['batch_size'] = 16
         
     elif epoch > 5 and epoch < 15:
-        params['batch_size'] = 20
+        params['batch_size'] = 16
         
     elif epoch >= 15 and epoch < 30:
-        params['batch_size'] = 20
+        params['batch_size'] = 16
         
     elif epoch >= 30 and epoch < 50:
-        params['batch_size'] = 20
+        params['batch_size'] = 16
         
     elif epoch >= 50 and epoch < 80:
-        params['batch_size'] = 20
+        params['batch_size'] = 16
         
     else:
-        params['batch_size'] = 20
+        params['batch_size'] = 16
         
     dataloader = data.DataLoader(dataset, **params)
         

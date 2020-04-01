@@ -13,6 +13,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from attention import *
 from transformers import BertModel, BertConfig
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 config = BertConfig.from_pretrained('bert-base-uncased', output_hidden_states=True)
 model_features = BertModel.from_pretrained('bert-base-uncased', config=config)
@@ -178,12 +179,12 @@ class bert_embedding_layer(nn.Module):
     def __init__(self, model=model_features):
         super().__init__()
         # Load pre-trained model (weights)
-        self.model = model 
+        self.model = model
         self.model.config.output_hidden_states=True
 
         
     def forward(self, tokens_tensor):
-        segments_tensor = torch.ones(tokens_tensor.shape[0], tokens_tensor.shape[1])
+        segments_tensor = torch.ones(tokens_tensor.shape[0], tokens_tensor.shape[1]).to(device)
         last_layers, _, encoded_layers = self.model(tokens_tensor, segments_tensor)
             
         return torch.cat(encoded_layers[-4:], dim=-1)
