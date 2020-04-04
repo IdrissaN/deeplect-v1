@@ -16,6 +16,7 @@ import tqdm
 import time
 import torch
 import random
+import logging
 import librosa
 import warnings
 import importlib
@@ -99,7 +100,6 @@ class LibriSpeechDataset(data.Dataset):
     _ext_txt = ".trans.txt"
     _ext_audio = ".flac"
     
-    
     def __init__(self, limit=None, n_channels=1, n_frames=128, sr=16000, n_fft=2048, max_target_length=40,
                  n_mels=39, hop_length=512, power=1.0, n_mfcc=39, duration=10, path="../librispeech/LibriSpeech/",
                  version = "train-clean-360", method='mel'):
@@ -120,13 +120,12 @@ class LibriSpeechDataset(data.Dataset):
         walker = walk_files(self._path, suffix=self._ext_audio, prefix=False, remove_suffix=True)
         self._walker = list(walker)[:limit]
         self.max_length = max_target_length
+     
         
-
     def __len__(self):
         'Denotes the total number of samples'
         return len(self._walker)
-    
-    
+
     
     def spec_augmenter(self, spec):
         """ Perform spectogram level's augmentation for audio data."""
@@ -234,11 +233,13 @@ class LibriSpeechDataset(data.Dataset):
             mat = self.wave2mfcc(wav)
         elif self.method == 'mel':
             mat = self.wave2melspec(wav)
-
+        # Saving the mat shape to check after
+        logging.info(mat.shape[1])
         # Padding to have the same number of frame in each mfccs
         if mat.shape[1] < self.n_frames:
             mat = np.array(np.pad(mat, ((0,0), (0, self.n_frames - mat.shape[1])), 'constant', constant_values=0)) 
         else:
+            # Truncating the matrix
             mat = mat[:, :self.n_frames]
         # 
         mat = mat.reshape((1, *mat.shape))
@@ -249,8 +250,7 @@ class LibriSpeechDataset(data.Dataset):
         else:
             sentence = sentence[:self.max_length]     
         mat = torch.tensor(mat)
-        # Random augmentation at sepectogram level for mel spectogram
-        #if self.method == 'mel':
+        # Random augmentation at sepectogram level
         mat = self.spec_augmenter(mat)
         
         return mat, torch.tensor(sentence)
@@ -292,7 +292,6 @@ def train_step(iters, phase, batch, type_scheduler, input_tensor, target_tensor,
     for di in range(1, target_length):
         decoder_output, decoder_hidden, decoder_attention = decoder(decoder_input, decoder_hidden,
                                                                     encoder_outputs, decoder_attention)
-        
         
         loss += criterion(decoder_output, target_tensor[:, di])
         if use_teacher_forcing:
@@ -342,11 +341,27 @@ def get_dataloader_scheduler(dataset, params, epoch):
     return dataloader, params['batch_size']
 
 
-def get_optimizers_schedulers(encoder, decoder, epoch):
+def get_optimizers_schedulers(encoder, decoder, epoch, stages=[80, 100, 130]):
     
     """ Implement a combination of optimizers and schedulers for different stage of the training."""
+    
+    # Write the logs
+    if epoch == 0:
+        logging.info("Starting the stage 1 with ADAM optimizer ...")
+        
+    elif epoch == stages[0]:
+        logging.info("Starting the stage 2 with SGD with exponential decay ...")
+        
+    elif epoch == stages[1]:
+        logging.info("Starting the stage 3 with SGD with warm restarts ...")
+        
+    elif epoch == stages[1]:
+        logging.info("Starting the stage 4 with SGD with reduce lr on plateau ...")
+    
+    # Choose the learning right learning rate scheduler
     outputs = {}
-    if epoch < 80:
+    # This is the stage 1
+    if epoch < stages[0]:
         # We will use an adaptative learning rate in this stage
         type_scheduler = 'no_schedulers'
         encoder_optimizer = optim.Adam(encoder.parameters())
@@ -357,20 +372,20 @@ def get_optimizers_schedulers(encoder, decoder, epoch):
         encoder_optimizer = optim.SGD(encoder.parameters(), momentum=0.9, nesterov=True)
         decoder_optimizer = optim.SGD(decoder.parameters(), momentum=0.9, nesterov=True)
         
-        if epoch < 100:
-            # Exponential decay between 80 and 100 epochs
+        if epoch < stages[1]:
+            # Exponential decay :stage 2
             type_scheduler = 'expo_decay'
             encoder_scheduler = ExponentialLR(encoder_optimizer, gamma=0.9)
             decoder_scheduler = ExponentialLR(decoder_optimizer, gamma=0.9)
         
-        elif epoch >= 100 and epoch < 130:
-            # Warm_restart between 100 and 130 epochs
+        elif epoch >= stages[1] and epoch < stages[2]:
+            # Warm_restart :stage 3
             type_scheduler = 'warm_restarts'
             encoder_scheduler = CosineAnnealingWarmRestarts(encoder_optimizer, T_0=0, T_mult=1)
             decoder_scheduler = CosineAnnealingWarmRestarts(decoder_optimizer, T_0=0, T_mult=1)
             
-        elif epoch >= 130:
-            # Reduce on plateau from 130 epochs and above
+        elif epoch >= stages[2]:
+            # Reduce on plateau :stage 4
             type_scheduler = 'reduce_on_plateau'
             encoder_scheduler = ReduceLROnPlateau(encoder_optimizer, 'min')
             decoder_scheduler = ReduceLROnPlateau(decoder_optimizer, 'min')
@@ -388,14 +403,14 @@ def global_trainer(nbr_epochs, train_dataset, valid_dataset, params, encoder, de
                    encoder_optimizer, decoder_optimizer,criterion, device, patience=20,
                    tokenizer=BertTokenizer.from_pretrained('bert-base-uncased'), model_name='deeplect-v1'):
     """ Train the model for a certain number of epochs."""
+    
+    logging.info("Starting the training !")
     # The day when the training starts
     day = date.today().strftime("%d-%m-%y")
     
     # The writer for tensorboard
     summary_path = 'runs/{}/{}'.format(model_name, day)
     writer = SummaryWriter(summary_path)
-    
-
     
     nb_params = sum(p.numel() for p in encoder.parameters() if p.requires_grad) + \
                 sum(p.numel() for p in decoder.parameters() if p.requires_grad)
@@ -409,6 +424,7 @@ def global_trainer(nbr_epochs, train_dataset, valid_dataset, params, encoder, de
     best_val_loss = np.inf
     count = 0
     for epoch in range(nbr_epochs):
+        logging.info("Epoch number {}".format(epoch))
         # Get the config 
         config = get_optimizers_schedulers(encoder, decoder, epoch)
         type_scheduler = config['type_scheduler']
@@ -471,7 +487,7 @@ def global_trainer(nbr_epochs, train_dataset, valid_dataset, params, encoder, de
                         encoder_scheduler.step(val_loss)
                         decoder_scheduler.step(val_loss)
                         
-
+        logging.info("Writing tensorboard log's for epoch {}".format(epoch))
         # Write into the tensorboard log to allow to plot the training's history
         writer.add_scalars('Loss', {'train': train_loss , 'val': val_loss}, epoch)
         # Encoder Conv_base
@@ -523,8 +539,6 @@ def global_trainer(nbr_epochs, train_dataset, valid_dataset, params, encoder, de
         writer.add_histogram('Decoder-rnn/gru_3.weight_ih_l0', decoder.gru_3.weight_ih_l0, epoch)
         writer.add_histogram('Decoder-rnn/gru_4.weight_hh_l0', decoder.gru_4.weight_hh_l0, epoch)
         writer.add_histogram('Decoder-rnn/gru_4.weight_ih_l0', decoder.gru_4.weight_ih_l0, epoch)
-        
-        
 
         #encoder norm layers
         writer.add_histogram('Decoder-norm/norm_layer_1.weight', decoder.norm_layer_1.weight, epoch)
@@ -543,10 +557,12 @@ def global_trainer(nbr_epochs, train_dataset, valid_dataset, params, encoder, de
                 count += 1
                 if count == patience:
                     print("\n")
-                    print(" ----- EARLY STOPPING ----- ") 
+                    print(" ----- EARLY STOPPING ----- ")
                     break
                     
     writer.close()
 
     print('\nTime taken for the training {:.5} hours\n'.format((time.time() - start) / 3600))
+    
+    logging.info("The training is over !")
         

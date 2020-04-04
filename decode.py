@@ -148,7 +148,6 @@ def beam_search_decode(mfccs, max_length_targ,  encoder, decoder,  targ_lang_tok
                 if n.is_leaf and not n.is_end:
                     # étendre le noeud (faire les prédictions dessus)
                     predictions, dec_hidden, attention_weights = decoder(n.wordid, n.h, enc_out, attention_weights)
-
                     # Pour signaler que le noeud est déjà étendu (utilisé)
                     n.is_leaf = False
                     # prendre le nombre de candidats choisis 
@@ -168,8 +167,7 @@ def beam_search_decode(mfccs, max_length_targ,  encoder, decoder,  targ_lang_tok
                         # Si on prédit la fin rajouter à endnodes
                         if targ_lang_tokenizer.convert_ids_to_tokens(ind.item()) == '[SEP]':
                             node.is_end = True 
-                            endnodes.append(node)
-       
+                            endnodes.append(node)   
             # Retenir que les beam width meilleurs           
             candidates = [all_nodes.get() for step in range(beam_width)]    
         # Last step before the result 

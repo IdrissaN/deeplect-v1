@@ -7,7 +7,6 @@
             #########################################################
             
 
-
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -17,7 +16,6 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 config = BertConfig.from_pretrained('bert-base-uncased', output_hidden_states=True)
 model_features = BertModel.from_pretrained('bert-base-uncased', config=config)
-model_features.eval()
 for param in model_features.parameters():
     param.requires_grad = False
     
@@ -49,10 +47,10 @@ def dim_calcul_avg_pool2d(N, C_in, H_in, W_in, layer):
     
     
 class ConvBase(nn.Module):
-    def __init__(self, hidden_size, batch_sz=16, spec_dim=(1, 39, 800)):
+    def __init__(self, hidden_size, batch_sz, spec_dim):
         super().__init__() 
         self.hidden_size = hidden_size
-        self.avg_pool_1 = nn.AvgPool2d(kernel_size=(3,3) , stride=(2,3), padding=(0,0))
+        self.avg_pool_1 = nn.AvgPool2d(kernel_size=(3,3), stride=(2,3), padding=(0,0))
         self.batchnorm2d_1 = nn.BatchNorm2d(hidden_size)
         self.conv2d_1 = nn.Conv2d(in_channels=1, out_channels=256, kernel_size=3, stride=1, dilation=1)
         self.conv2d_2 = nn.Conv2d(in_channels=256, out_channels=self.hidden_size, kernel_size=3, stride=1, dilation=1)
@@ -82,7 +80,6 @@ class RnnBase(nn.Module):
         self.device = device
         self.hidden_size = hidden_size
         self.batch_sz = batch_sz 
-        #self.batchnorm1d = nn.BatchNorm1d(bn_in_feat)
         self.gru = nn.GRU(gru_in_feat, self.hidden_size, batch_first=True, num_layers=1, bidirectional=True, dropout=0.2)
     
     
@@ -111,11 +108,11 @@ class RnnBase(nn.Module):
         
     
 class EncoderCONV2DRNN(nn.Module):
-    def __init__(self, device, batch_sz = 10, hidden_size=256):
+    def __init__(self, device, batch_sz, hidden_size, spec_dim):
         super().__init__() 
         
         self.batch_sz = batch_sz
-        self.conv_base = ConvBase(hidden_size)
+        self.conv_base = ConvBase(hidden_size, batch_sz, spec_dim=spec_dim)
         self.device = device
         self.hidden_size = hidden_size
         self.encoder_timestamp = self.conv_base.encoder_timestamp
@@ -180,11 +177,14 @@ class bert_embedding_layer(nn.Module):
         super().__init__()
         # Load pre-trained model (weights)
         self.model = model
+        self.model.eval()
         self.model.config.output_hidden_states=True
 
         
     def forward(self, tokens_tensor):
-        segments_tensor = torch.ones(tokens_tensor.shape[0], tokens_tensor.shape[1]).to(device)
+
+        segments_tensor = torch.ones(tokens_tensor.shape[0], tokens_tensor.shape[1], device=device)
+
         last_layers, _, encoded_layers = self.model(tokens_tensor, segments_tensor)
             
         return torch.cat(encoded_layers[-4:], dim=-1)
@@ -194,7 +194,7 @@ class bert_embedding_layer(nn.Module):
 class DecoderATTRNN(nn.Module):
     """Bahdanau Audio decoder"""
     
-    def __init__(self, vocab_size, dec_units, batch_sz=10, hidden_size=256, encoder_timestamp=265):
+    def __init__(self, vocab_size, dec_units, batch_sz, hidden_size, encoder_timestamp=198):
         
         super().__init__()
         self.batch_sz = batch_sz
@@ -213,7 +213,7 @@ class DecoderATTRNN(nn.Module):
         self.fc = nn.Linear(hidden_size, vocab_size)
         # used for attention
         #self.attention = BahdanauAttentionAudio(units=dec_units, hidden_size=hidden_size)
-        self.attention =  SuperHeadAttention(dec_units, hidden_size, encoder_timestamp)
+        self.attention =  AverageHeadAttention(dec_units, hidden_size, encoder_timestamp)
  
     
     def forward(self, input, hidden, enc_output, prev_attn_weights):
