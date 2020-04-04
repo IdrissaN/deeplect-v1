@@ -234,7 +234,7 @@ class LibriSpeechDataset(data.Dataset):
         elif self.method == 'mel':
             mat = self.wave2melspec(wav)
         # Saving the mat shape to check after
-        logging.info(mat.shape[1])
+        #logging.info(mat.shape[1])
         # Padding to have the same number of frame in each mfccs
         if mat.shape[1] < self.n_frames:
             mat = np.array(np.pad(mat, ((0,0), (0, self.n_frames - mat.shape[1])), 'constant', constant_values=0)) 
@@ -253,14 +253,11 @@ class LibriSpeechDataset(data.Dataset):
         # Random augmentation at sepectogram level
         mat = self.spec_augmenter(mat)
         
-        return mat, torch.tensor(sentence)
-    
-    
+        return mat, torch.tensor(sentence)   
 
     
     
-def train_step(iters, phase, batch, type_scheduler, input_tensor, target_tensor, encoder, decoder, encoder_optimizer,
-          decoder_optimizer, criterion, device, batch_sz, targ_lang_tokenizer, teacher_forcing_ratio=0.80):
+def train_step(iters, epoch, phase, batch, type_scheduler, input_tensor, target_tensor, encoder, decoder, encoder_optimizer, decoder_optimizer, criterion, device, batch_sz, targ_lang_tokenizer, teacher_forcing_ratio=0.80, encoder_scheduler=None, decoder_scheduler=None):
     
     # Initialize the encoder
     encoder_hidden = encoder.initialize_hidden_state()
@@ -341,7 +338,7 @@ def get_dataloader_scheduler(dataset, params, epoch):
     return dataloader, params['batch_size']
 
 
-def get_optimizers_schedulers(encoder, decoder, epoch, stages=[80, 100, 130]):
+def get_optimizers_schedulers(encoder, decoder, epoch, stages=[1, 2, 3]):
     
     """ Implement a combination of optimizers and schedulers for different stage of the training."""
     
@@ -355,7 +352,7 @@ def get_optimizers_schedulers(encoder, decoder, epoch, stages=[80, 100, 130]):
     elif epoch == stages[1]:
         logging.info("Starting the stage 3 with SGD with warm restarts ...")
         
-    elif epoch == stages[1]:
+    elif epoch > stages[1]:
         logging.info("Starting the stage 4 with SGD with reduce lr on plateau ...")
     
     # Choose the learning right learning rate scheduler
@@ -369,26 +366,26 @@ def get_optimizers_schedulers(encoder, decoder, epoch, stages=[80, 100, 130]):
         # No schedulers
         schedulers = None
     else:
-        encoder_optimizer = optim.SGD(encoder.parameters(), momentum=0.9, nesterov=True)
-        decoder_optimizer = optim.SGD(decoder.parameters(), momentum=0.9, nesterov=True)
+        encoder_optimizer = optim.SGD(encoder.parameters(), lr=0.01, momentum=0.9, nesterov=True)
+        decoder_optimizer = optim.SGD(decoder.parameters(), lr=0.01, momentum=0.9, nesterov=True)
         
         if epoch < stages[1]:
             # Exponential decay :stage 2
             type_scheduler = 'expo_decay'
-            encoder_scheduler = ExponentialLR(encoder_optimizer, gamma=0.9)
-            decoder_scheduler = ExponentialLR(decoder_optimizer, gamma=0.9)
+            encoder_scheduler = optim.lr_scheduler.ExponentialLR(encoder_optimizer, gamma=0.9)
+            decoder_scheduler = optim.lr_scheduler.ExponentialLR(decoder_optimizer, gamma=0.9)
         
         elif epoch >= stages[1] and epoch < stages[2]:
             # Warm_restart :stage 3
             type_scheduler = 'warm_restarts'
-            encoder_scheduler = CosineAnnealingWarmRestarts(encoder_optimizer, T_0=0, T_mult=1)
-            decoder_scheduler = CosineAnnealingWarmRestarts(decoder_optimizer, T_0=0, T_mult=1)
+            encoder_scheduler = optim.lr_scheduler.CosineAnnealingWarmRestarts(encoder_optimizer, T_0=1, T_mult=1)
+            decoder_scheduler = optim.lr_scheduler.CosineAnnealingWarmRestarts(decoder_optimizer, T_0=1, T_mult=1)
             
         elif epoch >= stages[2]:
             # Reduce on plateau :stage 4
             type_scheduler = 'reduce_on_plateau'
-            encoder_scheduler = ReduceLROnPlateau(encoder_optimizer, 'min')
-            decoder_scheduler = ReduceLROnPlateau(decoder_optimizer, 'min')
+            encoder_scheduler = optim.lr_scheduler.ReduceLROnPlateau(encoder_optimizer, 'min')
+            decoder_scheduler = optim.lr_scheduler.ReduceLROnPlateau(decoder_optimizer, 'min')
         
         schedulers = (encoder_scheduler, decoder_scheduler)
     outputs['type_scheduler'] = type_scheduler
@@ -424,12 +421,16 @@ def global_trainer(nbr_epochs, train_dataset, valid_dataset, params, encoder, de
     best_val_loss = np.inf
     count = 0
     for epoch in range(nbr_epochs):
-        logging.info("Epoch number {}".format(epoch))
+        logging.info("Epoch number {}".format(epoch + 1))
         # Get the config 
         config = get_optimizers_schedulers(encoder, decoder, epoch)
         type_scheduler = config['type_scheduler']
+        
         if config['schedulers'] != None:
             encoder_scheduler, decoder_scheduler = config['schedulers']
+        else:
+            encoder_scheduler, decoder_scheduler = None, None
+            
         encoder_optimizer = config['encoder_optimizer']
         decoder_optimizer = config['decoder_optimizer']       
         
@@ -458,14 +459,17 @@ def global_trainer(nbr_epochs, train_dataset, valid_dataset, params, encoder, de
                     pbar.set_description('Epoch {:>8}'.format(epoch + 1))
                     inp, targ = inp.to(device), targ.to(device)
                     if phase == 'train':
-                        batch_loss = train_step(iters, phase, batch, type_scheduler, inp, targ,
-                                                encoder, decoder, encoder_optimizer, decoder_optimizer, 
-                                                criterion, device, batch_sz, targ_lang_tokenizer=tokenizer)
+                        batch_loss = train_step(iters, epoch, phase, batch, type_scheduler, inp, targ, encoder, decoder, 
+                                                encoder_optimizer, decoder_optimizer, criterion, device, batch_sz, 
+                                                targ_lang_tokenizer=tokenizer, encoder_scheduler=encoder_scheduler, 
+                                                decoder_scheduler=decoder_scheduler)
                     else:
                         with torch.no_grad():
-                            batch_loss = train_step(iters, phase, batch, type_scheduler, inp, targ,
-                                                    encoder, decoder, encoder_optimizer, decoder_optimizer,
-                                                    criterion, device, batch_sz, targ_lang_tokenizer=tokenizer)
+                            batch_loss = train_step(iters, epoch, phase, batch, type_scheduler, inp, targ, encoder, decoder, 
+                                                    encoder_optimizer, decoder_optimizer, criterion, device, batch_sz,
+                                                    targ_lang_tokenizer=tokenizer, encoder_scheduler=encoder_scheduler,
+                                                    decoder_scheduler=decoder_scheduler)
+                            
                     total_loss += batch_loss
                 
                     if phase == 'train':
