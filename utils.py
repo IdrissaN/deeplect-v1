@@ -316,29 +316,29 @@ def get_dataloader_scheduler(dataset, params, epoch):
     """ The idea here is to ramp-up the batch_size from lowest value to the highest"""
     
     if epoch < 5:
-        params['batch_size'] = 16
+        params['batch_size'] = 10
         
     elif epoch > 5 and epoch < 15:
-        params['batch_size'] = 16
+        params['batch_size'] = 10
         
     elif epoch >= 15 and epoch < 30:
-        params['batch_size'] = 16
+        params['batch_size'] = 10
         
     elif epoch >= 30 and epoch < 50:
-        params['batch_size'] = 16
+        params['batch_size'] = 10
         
     elif epoch >= 50 and epoch < 80:
-        params['batch_size'] = 16
+        params['batch_size'] = 10
         
     else:
-        params['batch_size'] = 16
+        params['batch_size'] = 10
         
     dataloader = data.DataLoader(dataset, **params)
         
     return dataloader, params['batch_size']
 
 
-def get_optimizers_schedulers(encoder, decoder, epoch, stages=[1, 2, 3]):
+def get_optimizers_schedulers(encoder, decoder, epoch, stages=[200, 400, 550]):
     
     """ Implement a combination of optimizers and schedulers for different stage of the training."""
     
@@ -397,7 +397,7 @@ def get_optimizers_schedulers(encoder, decoder, epoch, stages=[1, 2, 3]):
 
 
 def global_trainer(nbr_epochs, train_dataset, valid_dataset, params, encoder, decoder, 
-                   encoder_optimizer, decoder_optimizer,criterion, device, patience=20,
+                   encoder_optimizer, decoder_optimizer,criterion, device, patience=30,
                    tokenizer=BertTokenizer.from_pretrained('bert-base-uncased'), model_name='deeplect-v1'):
     """ Train the model for a certain number of epochs."""
     

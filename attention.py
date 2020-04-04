@@ -67,9 +67,6 @@ class BahdanauAttentionAudio(nn.Module):
         context_vector = attention_weights * values
         context_vector = context_vector.sum(1)
         return context_vector, attention_weights, score 
-                      
-                      
-
         
 
 class AverageHeadAttention(nn.Module):
