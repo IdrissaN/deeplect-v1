@@ -99,9 +99,10 @@ class LibriSpeechDataset(data.Dataset):
     
     _ext_txt = ".trans.txt"
     _ext_audio = ".flac"
-    
-    def __init__(self, limit=None, n_channels=1, n_frames=128, sr=16000, n_fft=2048, max_target_length=40,
-                 n_mels=39, hop_length=512, power=1.0, n_mfcc=39, duration=10, path="../librispeech/LibriSpeech/",
+    # i figured it out, to set a window width to 25 ms and the stride to 10 ms 
+    # you just need to do hop_length=int(0.010sr), n_fft=int(0.025sr)
+    def __init__(self, limit=None, n_channels=1, n_frames=128, sr=16000, n_fft=400, max_target_length=80,
+                 n_mels=39, hop_length=160, power=1.0, n_mfcc=39, duration=10, path="../librispeech/LibriSpeech/",
                  version = "train-clean-360", method='mel'):
         'Initialization'
         self.method = method
@@ -158,7 +159,7 @@ class LibriSpeechDataset(data.Dataset):
     def choice_augmentation(self, wave):
         """Choose an augmentation technique from between adding noise or changing speed.
         """
-        yes_or_not = np.random.choice([False, True], p=[0.65, 0.35])
+        yes_or_not = np.random.choice([False, True], p=[0.85, 0.15])
         if yes_or_not == True:
             # Choose randomly an augmentation
             aug = np.random.choice(["b_noise", "speed"], p=[0.30, 0.70])
@@ -206,7 +207,8 @@ class LibriSpeechDataset(data.Dataset):
     
     def wave2melspec(self, wave):
         mel_spectogram =  librosa.feature.melspectrogram(y=wave, sr=self.sr, n_mels=self.n_mels,
-                                                         hop_length=self.hop_length, fmax=self.sr)
+                                                         hop_length=self.hop_length, fmax=self.sr,
+                                                         n_fft=self.n_fft)
         
         return mel_spectogram
     
@@ -233,6 +235,7 @@ class LibriSpeechDataset(data.Dataset):
             mat = self.wave2mfcc(wav)
         elif self.method == 'mel':
             mat = self.wave2melspec(wav)
+        #print(mat.shape[1])
         # Saving the mat shape to check after
         #logging.info(mat.shape[1])
         # Padding to have the same number of frame in each mfccs
@@ -245,6 +248,7 @@ class LibriSpeechDataset(data.Dataset):
         mat = mat.reshape((1, *mat.shape))
         sentence = preprocess_sentence(sentence)
         sentence = self.str2num(sentence, self.tokenizer)#[0]
+        #print(len(sentence))
         if len(sentence) < self.max_length:
             sentence = np.array(np.pad(sentence, (0, self.max_length - len(sentence)), 'constant', constant_values=0)) 
         else:
@@ -316,29 +320,29 @@ def get_dataloader_scheduler(dataset, params, epoch):
     """ The idea here is to ramp-up the batch_size from lowest value to the highest"""
     
     if epoch < 5:
-        params['batch_size'] = 10
+        params['batch_size'] = 24
         
-    elif epoch > 5 and epoch < 15:
-        params['batch_size'] = 10
+    elif epoch >= 5 and epoch < 15:
+        params['batch_size'] = 24
         
     elif epoch >= 15 and epoch < 30:
-        params['batch_size'] = 10
+        params['batch_size'] = 24
         
     elif epoch >= 30 and epoch < 50:
-        params['batch_size'] = 10
+        params['batch_size'] = 24
         
     elif epoch >= 50 and epoch < 80:
-        params['batch_size'] = 10
+        params['batch_size'] = 24
         
     else:
-        params['batch_size'] = 10
+        params['batch_size'] = 24
         
     dataloader = data.DataLoader(dataset, **params)
         
     return dataloader, params['batch_size']
 
 
-def get_optimizers_schedulers(encoder, decoder, epoch, stages=[200, 400, 550]):
+def get_optimizers_schedulers(encoder, decoder, epoch, stages=[60, 80, 100]):
     
     """ Implement a combination of optimizers and schedulers for different stage of the training."""
     
@@ -557,7 +561,7 @@ def global_trainer(nbr_epochs, train_dataset, valid_dataset, params, encoder, de
             torch.save(encoder, 'encoder-s2t.pt')
             torch.save(decoder, 'decoder-s2t.pt')
         else:
-            if epoch >= 130: # We perform early stopping only at the last stage
+            if epoch >= 500: # We perform early stopping only at the last stage
                 count += 1
                 if count == patience:
                     print("\n")

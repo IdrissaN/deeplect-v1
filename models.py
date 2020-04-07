@@ -50,10 +50,10 @@ class ConvBase(nn.Module):
     def __init__(self, hidden_size, batch_sz, spec_dim):
         super().__init__() 
         self.hidden_size = hidden_size
-        self.avg_pool_1 = nn.AvgPool2d(kernel_size=(3,3), stride=(2,3), padding=(0,0))
+        self.avg_pool_1 = nn.AvgPool2d(kernel_size=(3,3), stride=(2, 3), padding=(0,0))
         self.batchnorm2d_1 = nn.BatchNorm2d(hidden_size)
-        self.conv2d_1 = nn.Conv2d(in_channels=1, out_channels=256, kernel_size=3, stride=1, dilation=1)
-        self.conv2d_2 = nn.Conv2d(in_channels=256, out_channels=self.hidden_size, kernel_size=3, stride=1, dilation=1)
+        self.conv2d_1 = nn.Conv2d(in_channels=1, out_channels=hidden_size, kernel_size=3, stride=1, dilation=1)
+        self.conv2d_2 = nn.Conv2d(in_channels=hidden_size, out_channels=self.hidden_size, kernel_size=3, stride=1, dilation=1)
         # Compute the dimension that we will give to  the GRU
         output_dim_1 = dim_calcul_conv2d(batch_sz, *spec_dim, self.conv2d_1)
         output_dim_2 = dim_calcul_conv2d(*output_dim_1, self.conv2d_2)
@@ -123,8 +123,7 @@ class EncoderCONV2DRNN(nn.Module):
         self.norm_layer_5 = nn.LayerNorm((self.encoder_timestamp, hidden_size))
         self.norm_layer_6 = nn.LayerNorm((self.encoder_timestamp, hidden_size))
         
-        self.rnn_base_1 = RnnBase(device, hidden_size, batch_sz, bn_in_feat=self.encoder_timestamp, 
-                                  gru_in_feat=self.conv_base.input_gru_dim)
+        self.rnn_base_1 = RnnBase(device, hidden_size, batch_sz, bn_in_feat=self.encoder_timestamp, gru_in_feat=self.conv_base.input_gru_dim)
         self.rnn_base_2 = RnnBase(device, hidden_size, batch_sz, bn_in_feat=self.encoder_timestamp, gru_in_feat=hidden_size)
         self.rnn_base_3 = RnnBase(device, hidden_size, batch_sz, bn_in_feat=self.encoder_timestamp, gru_in_feat=hidden_size)
         self.rnn_base_4 = RnnBase(device, hidden_size, batch_sz, bn_in_feat=self.encoder_timestamp, gru_in_feat=hidden_size)
@@ -137,30 +136,31 @@ class EncoderCONV2DRNN(nn.Module):
         # Convolutionnal base
         output = self.conv_base(mfccs)
         # Sequential bloc
+        #1
         output, _ = self.rnn_base_1(output, hidden)
         output = self.norm_layer_1(output)
         copy_output = output.clone()
-        
+        #2
         output, _ = self.rnn_base_2(output, hidden)
         output = output + copy_output
         output = self.norm_layer_2(output)
         copy_output = output.clone()
-        
+        #3
         output, _ = self.rnn_base_3(output, hidden)
         output = output + copy_output
         output = self.norm_layer_3(output)
         copy_output = output.clone()
-        
+        #4
         output, _ = self.rnn_base_4(output, hidden)
         output = output + copy_output
         output = self.norm_layer_4(output)
         copy_output = output.clone()
-        
+        #5
         output, _ = self.rnn_base_5(output, hidden)
         output = output + copy_output
         output = self.norm_layer_5(output)
         copy_output = output.clone()
-
+        #6
         output, hidden = self.rnn_base_6(output, hidden)
         output = output + copy_output
         output = self.norm_layer_6(output)
@@ -225,16 +225,20 @@ class DecoderATTRNN(nn.Module):
         context_vector = torch.unsqueeze(context_vector, 1)
         x = torch.cat((context_vector, x), 2)
         # passing the concatenated vector to the GRU
+        #1
         output, _ = self.gru_1(x)
         copy_output = output.clone()
+        #2
         output, _ = self.gru_2(output)
         output = output + copy_output
         output = self.norm_layer_1(output)
         copy_output = output.clone()
+        #3
         output, _ = self.gru_3(output)
         output = output + copy_output
         output = self.norm_layer_2(output)
         copy_output = output.clone()
+        #4
         output, state = self.gru_4(output)
         output = output + copy_output
         output = self.norm_layer_3(output)
