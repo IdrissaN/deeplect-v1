@@ -44,20 +44,35 @@ def dim_calcul_avg_pool2d(N, C_in, H_in, W_in, layer):
     W_out = 1 + (W_in + 2 * padding[1] - kernel_size[1]) // stride[1]
         
     return (N, C_out, H_out, W_out)
+
+
+def dim_calcul_max_pool2d(N, C_in, H_in, W_in, layer):
+
+    padding = layer.padding
+    kernel_size = layer.kernel_size
+    stride = layer.stride
+    dilation = layer.dilation
+    C_out = C_in
+    H_out = 1 + (H_in + 2 * padding[0] - dilation[0] * (kernel_size[0] - 1)- 1) // stride[0]
+    W_out = 1 + (W_in + 2 * padding[1] - dilation[1] * (kernel_size[1] - 1)- 1) // stride[1]
+        
+    return (N, C_out, H_out, W_out)
     
     
 class ConvBase(nn.Module):
     def __init__(self, hidden_size, batch_sz, spec_dim):
         super().__init__() 
         self.hidden_size = hidden_size
-        self.avg_pool_1 = nn.AvgPool2d(kernel_size=(3,3), stride=(2, 3), padding=(0,0))
+        self.pool_1 = nn.AvgPool2d(kernel_size=(3,3), stride=(2, 3), padding=(0,0))
+        #self.pool_1 = nn.MaxPool2d(kernel_size=(3, 3), stride=(2, 3), padding=(0,0), dilation=(1,1))
         self.batchnorm2d_1 = nn.BatchNorm2d(hidden_size)
         self.conv2d_1 = nn.Conv2d(in_channels=1, out_channels=hidden_size, kernel_size=3, stride=1, dilation=1)
         self.conv2d_2 = nn.Conv2d(in_channels=hidden_size, out_channels=self.hidden_size, kernel_size=3, stride=1, dilation=1)
         # Compute the dimension that we will give to  the GRU
         output_dim_1 = dim_calcul_conv2d(batch_sz, *spec_dim, self.conv2d_1)
         output_dim_2 = dim_calcul_conv2d(*output_dim_1, self.conv2d_2)
-        output_dim_3 = dim_calcul_avg_pool2d(*output_dim_2, self.avg_pool_1)
+        output_dim_3 = dim_calcul_avg_pool2d(*output_dim_2, self.pool_1)
+        #output_dim_3 = dim_calcul_max_pool2d(*output_dim_2, self.pool_1)
         self.input_gru_dim = output_dim_3[1] * output_dim_3[2]
         self.encoder_timestamp = output_dim_3[-1]
 
@@ -67,7 +82,7 @@ class ConvBase(nn.Module):
         conv_layer = self.conv2d_1(mfccs)
         conv_layer = self.conv2d_2(F.relu(conv_layer))
         conv_layer = self.batchnorm2d_1(F.relu(conv_layer))
-        avg_layer = self.avg_pool_1(conv_layer) 
+        avg_layer = self.pool_1(conv_layer) 
         # Reshape from (batch, channels, features, time) ----> (batch, time, channels * features)
         dim_0, dim_1, dim_2, dim_3 = avg_layer.shape
         output = avg_layer.reshape(dim_0, dim_3, dim_1 * dim_2)

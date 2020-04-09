@@ -119,7 +119,7 @@ def greedy_decode(mfccs, max_length_targ, encoder, decoder, targ_lang_tokenizer,
     
         
 def beam_search_decode(mfccs, max_length_targ,  encoder, decoder,  targ_lang_tokenizer, device,
-                       nb_candidates, beam_width, alpha, enc_units=256, encoder_timestamp=265):
+                       nb_candidates, beam_width, alpha, enc_units, encoder_timestamp):
 
     # Send the inputs matrix to device
     mfccs = torch.tensor(mfccs).to(device)
@@ -190,13 +190,13 @@ def beam_search_decode(mfccs, max_length_targ,  encoder, decoder,  targ_lang_tok
         
 
 def evaluate(mfccs, references, max_length_targ, encoder, decoder, targ_lang_tokenizer, 
-              device, beam_search=False, beam_width=3, alpha=0.3, nb_candidates=10):
+              device, beam_search=False, beam_width=3, alpha=0.3, nb_candidates=10, enc_units=256, encoder_timestamp=265):
     
     if beam_search == False:
         result= greedy_decode(mfccs, max_length_targ, encoder, decoder, targ_lang_tokenizer, device)
     else:
         result = beam_search_decode(mfccs, max_length_targ, encoder, decoder, targ_lang_tokenizer, device=device,
-                                              beam_width=beam_width, nb_candidates=nb_candidates, alpha=alpha)
+                                    beam_width=beam_width, nb_candidates=nb_candidates, alpha=alpha, enc_units=enc_units, encoder_timestamp=encoder_timestamp)
     result = result.split()    
     BLEUscore = bleu([references], result, weights = (0.5, 0.5))
     

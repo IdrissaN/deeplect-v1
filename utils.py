@@ -249,19 +249,20 @@ class LibriSpeechDataset(data.Dataset):
         sentence = preprocess_sentence(sentence)
         sentence = self.str2num(sentence, self.tokenizer)#[0]
         #print(len(sentence))
+        #logging.info(len(sentence))
         if len(sentence) < self.max_length:
             sentence = np.array(np.pad(sentence, (0, self.max_length - len(sentence)), 'constant', constant_values=0)) 
         else:
             sentence = sentence[:self.max_length]     
         mat = torch.tensor(mat)
-        # Random augmentation at sepectogram level
+        # Random augmentation at spectogram level
         mat = self.spec_augmenter(mat)
         
         return mat, torch.tensor(sentence)   
 
     
     
-def train_step(iters, epoch, phase, batch, type_scheduler, input_tensor, target_tensor, encoder, decoder, encoder_optimizer, decoder_optimizer, criterion, device, batch_sz, targ_lang_tokenizer, teacher_forcing_ratio=0.80, encoder_scheduler=None, decoder_scheduler=None):
+def train_step(iters, epoch, phase, batch, type_scheduler, input_tensor, target_tensor, encoder, decoder, encoder_optimizer, decoder_optimizer, criterion, device, batch_sz, targ_lang_tokenizer, teacher_forcing_ratio=0.85, encoder_scheduler=None, decoder_scheduler=None):
     
     # Initialize the encoder
     encoder_hidden = encoder.initialize_hidden_state()
